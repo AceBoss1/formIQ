@@ -7,11 +7,11 @@ const C = {
 };
 
 const METRICS_DEF = [
-  { key: "kneeAlignment",    label: "Knee Alignment",   weight: 0.25, icon: "⟁" },
-  { key: "spineNeutrality",  label: "Spine Neutrality", weight: 0.25, icon: "↕" },
-  { key: "squatDepth",       label: "Squat Depth",      weight: 0.20, icon: "↓" },
-  { key: "tempoConsistency", label: "Tempo Control",    weight: 0.15, icon: "⏱" },
-  { key: "hipHinge",         label: "Hip Hinge",        weight: 0.15, icon: "⌒" },
+  { key: "kneeAlignment",    label: "Knee Alignment",   weight: 0.25 },
+  { key: "spineNeutrality",  label: "Spine Neutrality", weight: 0.25 },
+  { key: "squatDepth",       label: "Squat Depth",      weight: 0.20 },
+  { key: "tempoConsistency", label: "Tempo Control",    weight: 0.15 },
+  { key: "hipHinge",         label: "Hip Hinge",        weight: 0.15 },
 ];
 
 const TIPS = [
@@ -55,9 +55,71 @@ export default function FormIQ() {
   const [tipI, setTipI]             = useState(0);
   const [scan, setScan]             = useState(0);
   const [dots, setDots]             = useState(0);
-  const historyRef = useRef([]);
+  const [camError, setCamError]     = useState("");
+  const [camReady, setCamReady]     = useState(false);
+  const [facingMode, setFacingMode] = useState("environment");
+  const historyRef  = useRef([]);
+  const videoRef    = useRef(null);
+  const streamRef   = useRef(null);
 
   const REPS = 10, REST = 90;
+
+  // ── Camera start/stop ──────────────────────────────────────
+  const startCamera = async (facing) => {
+    setCamError("");
+    setCamReady(false);
+    try {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false,
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onloadedmetadata = () => {
+          videoRef.current.play();
+          setCamReady(true);
+        };
+      }
+    } catch (err) {
+      if (err.name === "NotAllowedError") {
+        setCamError("Camera permission denied. Please allow camera access in your browser settings and try again.");
+      } else if (err.name === "NotFoundError") {
+        setCamError("No camera found on this device.");
+      } else {
+        setCamError("Could not start camera: " + err.message);
+      }
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    setCamReady(false);
+  };
+
+  // Start camera when entering workout in single mode
+  useEffect(() => {
+    if (screen === "workout" && camMode === "single") {
+      startCamera(facingMode);
+    }
+    if (screen !== "workout") {
+      stopCamera();
+    }
+    // eslint-disable-next-line
+  }, [screen, camMode]);
+
+  // Flip camera
+  const flipCamera = () => {
+    const next = facingMode === "environment" ? "user" : "environment";
+    setFacingMode(next);
+    startCamera(next);
+  };
 
   useEffect(() => {
     if (screen !== "workout") return;
@@ -162,11 +224,13 @@ Respond in exactly 3 sentences. No lists, no headers.`
   };
 
   const restart = () => {
+    stopCamera();
     setScreen("setup"); setCamMode(null); setCurSet(1); setReps(0);
     setHistory([]); historyRef.current = [];
     setMetrics(null); setFeedback("");
     setFinalScore(null); setAnalyzing(false);
     setResting(false); setRestT(0); setTotalSets(3);
+    setCamError(""); setCamReady(false);
   };
 
   const font = "system-ui, -apple-system, 'Segoe UI', sans-serif";
@@ -191,19 +255,18 @@ Respond in exactly 3 sentences. No lists, no headers.`
   if (screen === "setup") return (
     <div style={{ ...page, padding: "28px 20px 32px" }}>
       <style>{`
-        @keyframes fadeUp { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
-        .fu { animation: fadeUp 0.4s ease forwards; }
-        .fu1 { animation-delay:0.05s; opacity:0 }
-        .fu2 { animation-delay:0.12s; opacity:0 }
-        .fu3 { animation-delay:0.19s; opacity:0 }
-        .fu4 { animation-delay:0.26s; opacity:0 }
-        .fu5 { animation-delay:0.33s; opacity:0 }
-        .cam-card:hover { border-color:${C.accent}88 !important; }
-        .rep-btn:active { transform:scale(0.97); }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+        .fu{animation:fadeUp 0.4s ease forwards}
+        .fu1{animation-delay:0.05s;opacity:0} .fu2{animation-delay:0.12s;opacity:0}
+        .fu3{animation-delay:0.19s;opacity:0} .fu4{animation-delay:0.26s;opacity:0}
+        .fu5{animation-delay:0.33s;opacity:0}
+        .cam-card:hover{border-color:${C.accent}88 !important}
+        .rep-btn:active{transform:scale(0.97)}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        .pulse{animation:pulse 1.8s ease-in-out infinite}
       `}</style>
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
 
-        {/* ── HERO LOGO ── */}
         <div className="fu fu1" style={{ textAlign: "center", marginBottom: 36 }}>
           <img
             src={`${process.env.PUBLIC_URL}/formIQ.png`}
@@ -211,27 +274,33 @@ Respond in exactly 3 sentences. No lists, no headers.`
             style={{ height: 110, width: "auto", objectFit: "contain", display: "block", margin: "0 auto 14px" }}
           />
           <div style={{
-            display: "inline-block",
-            fontSize: 10, letterSpacing: 3, color: C.accent,
+            display: "inline-block", fontSize: 10, letterSpacing: 3, color: C.accent,
             textTransform: "uppercase", fontWeight: 600,
             background: C.accent + "15", padding: "4px 14px", borderRadius: 20,
             border: `1px solid ${C.accent}30`,
-          }}>
-            AI Squat Coach · Phase 1
-          </div>
+          }}>AI Squat Coach · Phase 1</div>
           <div style={{ color: C.mutedLight, marginTop: 12, fontSize: 14 }}>
             Real-time form tracking · AI coaching · Session scoring
           </div>
         </div>
 
-        {/* ── CAMERA SETUP ── */}
         <div className="fu fu2" style={{ marginBottom: 18 }}>
           <div style={{ ...label, marginBottom: 10 }}>Camera Setup</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[
-              { id: "quad-4k", title: "Quad 4K System",  lines: ["4× cameras via HDMI", "Front · Back · Left · Right", "Capture card required"], badge: "PRO" },
-              { id: "single",  title: "Single Camera",    lines: ["Webcam · Mobile · HDMI", "Side-on view recommended", "Plug-and-play ready"],   badge: "BASIC" },
-            ].map(({ id, title, lines, badge }) => (
+              {
+                id: "quad-4k", title: "Quad 4K System", badge: "PRO · PHASE 2",
+                lines: ["4× cameras via HDMI", "Front · Back · Left · Right", "Capture card required"],
+                note: "🔒 Activates in Phase 2",
+                locked: true,
+              },
+              {
+                id: "single", title: "Single Camera", badge: "LIVE",
+                lines: ["Uses your device camera", "Side-on view recommended", "Webcam or phone ready"],
+                note: "✓ Camera opens immediately",
+                locked: false,
+              },
+            ].map(({ id, title, lines, badge, note, locked }) => (
               <div
                 key={id}
                 className="cam-card"
@@ -240,24 +309,44 @@ Respond in exactly 3 sentences. No lists, no headers.`
                   ...card(false), cursor: "pointer", transition: "border-color 0.2s, background 0.2s",
                   border: `1px solid ${camMode === id ? C.accent : C.border}`,
                   background: camMode === id ? "#071510" : C.surface,
-                  position: "relative",
+                  position: "relative", opacity: locked && camMode !== id ? 0.75 : 1,
                 }}
               >
                 <div style={{
                   position: "absolute", top: 12, right: 12, fontSize: 9, fontWeight: 700,
                   letterSpacing: 1.5, padding: "3px 8px", borderRadius: 4,
-                  background: camMode === id ? C.accent : C.s2,
-                  color: camMode === id ? "#000" : C.muted,
+                  background: locked ? C.s3 : (camMode === id ? C.accent : C.s2),
+                  color: locked ? C.warn : (camMode === id ? "#000" : C.muted),
+                  border: locked ? `1px solid ${C.warn}40` : "none",
                 }}>{badge}</div>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>{title}</div>
                 {lines.map((l, i) => <div key={i} style={{ fontSize: 12, color: C.mutedLight, lineHeight: 1.7 }}>{l}</div>)}
-                {camMode === id && <div style={{ marginTop: 10, fontSize: 11, color: C.accent, fontWeight: 600 }}>✓ Selected</div>}
+                <div style={{ marginTop: 10, fontSize: 11, color: locked ? C.warn : C.accent, fontWeight: 600 }}>{note}</div>
               </div>
             ))}
           </div>
+
+          {/* Phase 2 notice when quad is selected */}
+          {camMode === "quad-4k" && (
+            <div style={{
+              marginTop: 10, padding: "12px 14px", borderRadius: 8,
+              background: C.warn + "12", border: `1px solid ${C.warn}30`,
+              display: "flex", gap: 10, alignItems: "flex-start",
+            }}>
+              <div style={{ fontSize: 16, flexShrink: 0 }}>⚠️</div>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: C.warn, marginBottom: 4 }}>
+                  Quad 4K Camera — Phase 2 Feature
+                </div>
+                <div style={{ fontSize: 12, color: C.mutedLight, lineHeight: 1.6 }}>
+                  Multi-camera HDMI input via capture card will be fully activated in Phase 2 with MediaPipe Pose integration.
+                  You can still run a simulated session to preview the interface and scoring system.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* ── SESSION CONFIG ── */}
         <div className="fu fu3" style={{ ...card(false), marginBottom: 18 }}>
           <div style={{ ...label, marginBottom: 14 }}>Session Config</div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -273,20 +362,19 @@ Respond in exactly 3 sentences. No lists, no headers.`
           </div>
         </div>
 
-        {/* ── PHASE NOTE ── */}
         <div className="fu fu4" style={{ ...card(false), marginBottom: 20, background: C.s2 }}>
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ fontSize: 18, flexShrink: 0 }}>🔬</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Phase 1 — Simulation Mode</div>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Phase 1 — Single Camera Active</div>
               <div style={{ fontSize: 12, color: C.mutedLight, lineHeight: 1.6 }}>
-                Camera feeds and form metrics are simulated. Phase 2 integrates MediaPipe Pose for live keypoint tracking from all camera inputs.
+                Basic mode opens your real device camera now. Form metrics are AI-simulated in Phase 1.
+                Phase 2 adds live MediaPipe Pose keypoint tracking and automatic rep detection on all inputs.
               </div>
             </div>
           </div>
         </div>
 
-        {/* ── START ── */}
         <div className="fu fu5">
           <button
             onClick={() => camMode && setScreen("workout")}
@@ -298,12 +386,16 @@ Respond in exactly 3 sentences. No lists, no headers.`
               letterSpacing: 2.5, textTransform: "uppercase", transition: "all 0.25s",
             }}
           >
-            {camMode ? "Begin Session →" : "Select a camera mode to start"}
+            {!camMode
+              ? "Select a camera mode to start"
+              : camMode === "single"
+              ? "Open Camera & Begin →"
+              : "Preview Session (Simulated) →"}
           </button>
         </div>
 
         <div style={{ display: "flex", gap: 6, marginTop: 16, flexWrap: "wrap", justifyContent: "center" }}>
-          {["360° multi-angle", "AI coaching", "Per-set scoring", "HDMI support", "Mobile ready"].map(f => (
+          {["Live camera", "AI coaching", "Per-set scoring", "HDMI Phase 2", "Mobile ready"].map(f => (
             <span key={f} style={{ fontSize: 11, color: C.muted, background: C.s2, padding: "3px 10px", borderRadius: 20 }}>{f}</span>
           ))}
         </div>
@@ -315,18 +407,18 @@ Respond in exactly 3 sentences. No lists, no headers.`
   if (screen === "workout") {
     const pct = (reps / REPS) * 100;
 
-    const CamFeed = ({ label: lbl, angle }) => (
+    const SimFeed = ({ label: lbl, angle }) => (
       <div style={{
         background: "#030303", position: "relative", overflow: "hidden",
-        aspectRatio: camMode === "quad-4k" ? "4/3" : "16/9",
+        aspectRatio: "4/3",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
-        <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.07 }} preserveAspectRatio="none">
+        <svg style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity:0.07 }} preserveAspectRatio="none">
           {[1,2,3,4,5].map(i => <line key={`v${i}`} x1={`${i*16.66}%`} y1="0" x2={`${i*16.66}%`} y2="100%" stroke={C.accent} strokeWidth="0.5"/>)}
           {[1,2,3].map(i => <line key={`h${i}`} x1="0" y1={`${i*25}%`} x2="100%" y2={`${i*25}%`} stroke={C.accent} strokeWidth="0.5"/>)}
         </svg>
         <div style={{ position:"absolute", left:0, right:0, height:1, top:`${scan}%`, background:`linear-gradient(90deg,transparent,${C.accent}60,transparent)` }}/>
-        <svg viewBox="0 0 80 90" width={camMode === "quad-4k" ? "26%" : "14%"} style={{ opacity:0.22 }}>
+        <svg viewBox="0 0 80 90" width="26%" style={{ opacity:0.22 }}>
           <circle cx="40" cy="9" r="7" fill={C.accent}/>
           <line x1="40" y1="16" x2="36" y2="46" stroke={C.accent} strokeWidth="3" strokeLinecap="round"/>
           <line x1="38" y1="24" x2="20" y2="30" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round"/>
@@ -342,10 +434,10 @@ Respond in exactly 3 sentences. No lists, no headers.`
           <circle cx="72" cy="25" r="5" fill="none" stroke={C.accent} strokeWidth="2"/>
         </svg>
         {[
-          { top:7, left:7,   bt:true, bl:true },
-          { top:7, right:7,  bt:true, br:true },
-          { bottom:7, left:7,  bb:true, bl:true },
-          { bottom:7, right:7, bb:true, br:true },
+          { top:7,    left:7,   bt:true, bl:true },
+          { top:7,    right:7,  bt:true, br:true },
+          { bottom:7, left:7,   bb:true, bl:true },
+          { bottom:7, right:7,  bb:true, br:true },
         ].map(({ top, left, right, bottom, bt, br, bb, bl }, i) => (
           <div key={i} style={{
             position:"absolute", top, left, right, bottom, width:13, height:13,
@@ -357,8 +449,8 @@ Respond in exactly 3 sentences. No lists, no headers.`
         ))}
         <div style={{ position:"absolute", bottom:7, left:9, fontSize:9, color:C.accent, letterSpacing:2, fontWeight:700 }}>{lbl}</div>
         <div style={{ position:"absolute", top:8, right:9, display:"flex", alignItems:"center", gap:4 }}>
-          <div style={{ width:5, height:5, borderRadius:"50%", background:"#FF3B3B" }}/>
-          <span style={{ fontSize:9, color:C.muted, letterSpacing:1 }}>LIVE</span>
+          <div style={{ width:5, height:5, borderRadius:"50%", background:"#FF3B3B" }} className="pulse"/>
+          <span style={{ fontSize:9, color:C.muted, letterSpacing:1 }}>SIM</span>
         </div>
         {angle && <div style={{ position:"absolute", top:8, left:9, fontSize:9, color:C.muted, letterSpacing:1 }}>{angle}</div>}
       </div>
@@ -366,18 +458,126 @@ Respond in exactly 3 sentences. No lists, no headers.`
 
     return (
       <div style={{ ...page }}>
-        <div style={{ display:"grid", gridTemplateColumns: camMode==="quad-4k" ? "1fr 1fr" : "1fr", gap:1.5, background:"#000" }}>
-          {camMode === "quad-4k"
-            ? [
+
+        {/* ── SINGLE: real camera ── */}
+        {camMode === "single" && (
+          <div style={{ position:"relative", background:"#000", width:"100%" }}>
+            {/* Live video */}
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              style={{ width:"100%", maxHeight: 340, objectFit:"cover", display:"block" }}
+            />
+
+            {/* Overlay grid */}
+            <svg style={{ position:"absolute", inset:0, width:"100%", height:"100%", opacity:0.09, pointerEvents:"none" }} preserveAspectRatio="none">
+              {[1,2,3,4,5].map(i => <line key={`v${i}`} x1={`${i*16.66}%`} y1="0" x2={`${i*16.66}%`} y2="100%" stroke={C.accent} strokeWidth="0.5"/>)}
+              {[1,2,3].map(i => <line key={`h${i}`} x1="0" y1={`${i*25}%`} x2="100%" y2={`${i*25}%`} stroke={C.accent} strokeWidth="0.5"/>)}
+            </svg>
+
+            {/* Scan line */}
+            <div style={{ position:"absolute", left:0, right:0, height:1, top:`${scan}%`, background:`linear-gradient(90deg,transparent,${C.accent}60,transparent)`, pointerEvents:"none" }}/>
+
+            {/* Corner brackets */}
+            {[
+              { top:10, left:10,   bt:true, bl:true },
+              { top:10, right:10,  bt:true, br:true },
+              { bottom:10, left:10,  bb:true, bl:true },
+              { bottom:10, right:10, bb:true, br:true },
+            ].map(({ top, left, right, bottom, bt, br, bb, bl }, i) => (
+              <div key={i} style={{
+                position:"absolute", top, left, right, bottom, width:18, height:18, pointerEvents:"none",
+                borderTop:    bt ? `2px solid ${C.accent}` : "none",
+                borderRight:  br ? `2px solid ${C.accent}` : "none",
+                borderBottom: bb ? `2px solid ${C.accent}` : "none",
+                borderLeft:   bl ? `2px solid ${C.accent}` : "none",
+              }}/>
+            ))}
+
+            {/* LIVE badge */}
+            <div style={{ position:"absolute", top:12, left:12, display:"flex", alignItems:"center", gap:5,
+              background:"#000000AA", padding:"4px 9px", borderRadius:6 }}>
+              <div style={{ width:6, height:6, borderRadius:"50%", background:"#FF3B3B" }} className="pulse"/>
+              <span style={{ fontSize:10, color:C.text, letterSpacing:1.5, fontWeight:700 }}>LIVE</span>
+            </div>
+
+            {/* Flip camera button */}
+            <button
+              onClick={flipCamera}
+              style={{
+                position:"absolute", top:10, right:10,
+                background:"#000000AA", border:`1px solid ${C.border}`,
+                borderRadius:8, padding:"6px 10px", cursor:"pointer",
+                fontSize:16, color:C.text,
+              }}
+              title="Flip camera"
+            >🔄</button>
+
+            {/* Phase 2 pose overlay notice */}
+            <div style={{
+              position:"absolute", bottom:10, left:"50%", transform:"translateX(-50%)",
+              background:"#000000BB", border:`1px solid ${C.accent}30`,
+              borderRadius:8, padding:"5px 12px", whiteSpace:"nowrap",
+            }}>
+              <span style={{ fontSize:10, color:C.accent, letterSpacing:1.5 }}>POSE TRACKING · PHASE 2</span>
+            </div>
+
+            {/* Camera error */}
+            {camError && (
+              <div style={{
+                position:"absolute", inset:0, display:"flex", flexDirection:"column",
+                alignItems:"center", justifyContent:"center", background:"#000000EE", padding:20,
+              }}>
+                <div style={{ fontSize:32, marginBottom:12 }}>📷</div>
+                <div style={{ fontSize:13, color:C.danger, textAlign:"center", lineHeight:1.6, marginBottom:16 }}>{camError}</div>
+                <button
+                  onClick={() => startCamera(facingMode)}
+                  style={{ padding:"10px 22px", background:C.accent, color:"#000", border:"none", borderRadius:8, fontWeight:700, cursor:"pointer" }}
+                >
+                  Retry Camera
+                </button>
+              </div>
+            )}
+
+            {/* Loading state */}
+            {!camReady && !camError && (
+              <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"#000000CC" }}>
+                <div style={{ textAlign:"center" }}>
+                  <div style={{ fontSize:28, marginBottom:8 }}>📷</div>
+                  <div className="pulse" style={{ fontSize:12, color:C.accent, letterSpacing:2 }}>OPENING CAMERA...</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── QUAD: simulated feeds ── */}
+        {camMode === "quad-4k" && (
+          <div>
+            {/* Phase 2 banner */}
+            <div style={{
+              background: C.warn + "18", borderBottom:`1px solid ${C.warn}30`,
+              padding:"8px 16px", display:"flex", alignItems:"center", gap:8,
+            }}>
+              <span style={{ fontSize:13 }}>🔒</span>
+              <span style={{ fontSize:11, color:C.warn, fontWeight:600, letterSpacing:0.5 }}>
+                Quad 4K HDMI camera feeds activate in Phase 2 — currently showing simulation
+              </span>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:1.5, background:"#000" }}>
+              {[
                 { label:"FRONT",      angle:"CAM-1 · 4K" },
                 { label:"BACK",       angle:"CAM-2 · 4K" },
                 { label:"LEFT SIDE",  angle:"CAM-3 · 4K" },
                 { label:"RIGHT SIDE", angle:"CAM-4 · 4K" },
-              ].map(({ label: lbl, angle }) => <CamFeed key={lbl} label={lbl} angle={angle}/>)
-            : <CamFeed label="MAIN CAMERA" />
-          }
-        </div>
+              ].map(({ label: lbl, angle }) => <SimFeed key={lbl} label={lbl} angle={angle}/>)}
+            </div>
+          </div>
+        )}
 
+        {/* ── Controls ── */}
         <div style={{ padding:"18px 20px 24px", background:C.bg }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:14 }}>
             <div>
@@ -430,7 +630,7 @@ Respond in exactly 3 sentences. No lists, no headers.`
           </button>
 
           <div style={{ textAlign:"center", marginTop:10, fontSize:11, color:C.muted }}>
-            Phase 2: automatic rep detection via MediaPipe Pose
+            Phase 2: auto rep detection via pose keypoints
           </div>
         </div>
       </div>
@@ -563,13 +763,13 @@ Respond in exactly 3 sentences. No lists, no headers.`
           <img
             src={`${process.env.PUBLIC_URL}/formIQ.png`}
             alt="FormIQ"
-            style={{ height: 60, width:"auto", objectFit:"contain", display:"block", margin:"0 auto 20px", opacity:0.85 }}
+            style={{ height:60, width:"auto", objectFit:"contain", display:"block", margin:"0 auto 20px", opacity:0.85 }}
           />
           <div style={{ ...label, marginBottom:14 }}>Session Complete</div>
           <div style={{ fontSize:104, fontWeight:900, letterSpacing:-6, color:gc, lineHeight:1 }}>{fs}</div>
           <div style={{ fontSize:24, color:gc, fontWeight:700, marginTop:6 }}>{grade(fs)}  ·  {gradeLabel(fs)}</div>
           <div style={{ color:C.muted, marginTop:8, fontSize:13 }}>
-            {totalSets} sets · {totalSets * REPS} total reps · {camMode === "quad-4k" ? "Quad 4K" : "Single Camera"}
+            {totalSets} sets · {totalSets * REPS} total reps · {camMode === "quad-4k" ? "Quad 4K (Simulated)" : "Single Camera (Live)"}
           </div>
         </div>
 
@@ -613,13 +813,13 @@ Respond in exactly 3 sentences. No lists, no headers.`
         </div>
 
         <div style={{ ...card(false), marginBottom:20, background:C.s2 }}>
-          <div style={{ ...label, marginBottom:10 }}>Roadmap — Coming in Phase 2</div>
+          <div style={{ ...label, marginBottom:10 }}>Roadmap — Phase 2</div>
           {[
             "Live MediaPipe Pose tracking on all camera inputs",
+            "Quad 4K HDMI camera activation via capture card",
             "Automatic rep detection — no tapping required",
             "Real-time on-screen form alerts mid-rep",
-            "Rep-by-rep consistency heatmap per set",
-            "Session history & long-term progress analytics",
+            "Rep-by-rep heatmap and long-term analytics",
           ].map((item, i) => (
             <div key={i} style={{ display:"flex", gap:8, marginBottom:8, alignItems:"flex-start" }}>
               <div style={{ color:C.muted, fontSize:12, marginTop:1, flexShrink:0 }}>○</div>
