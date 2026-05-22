@@ -295,7 +295,7 @@ Respond in exactly 3 sentences. No lists, no headers.`
                 locked: true,
               },
               {
-                id: "single", title: "Single Camera", badge: "LIVE",
+                id: "single", title: "Single Camera", badge: "Basic · LIVE",
                 lines: ["Uses your device camera", "Side-on view recommended", "Webcam or phone ready"],
                 note: "✓ Camera opens immediately",
                 locked: false,
