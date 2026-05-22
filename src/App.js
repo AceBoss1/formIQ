@@ -211,13 +211,23 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
         {/* Logo */}
         <div className="fu fu1" style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
-            <div style={{ width: 7, height: 7, borderRadius: "50%", background: C.accent, boxShadow: `0 0 10px ${C.accent}` }} />
-            <span style={{ ...label, color: C.accent }}>AI Squat Coach · Phase 1</span>
-          </div>
-          <div style={{ fontSize: 54, fontWeight: 900, letterSpacing: -3, lineHeight: 1, margin: 0 }}>FormIQ</div>
-          <div style={{ color: C.mutedLight, marginTop: 8, fontSize: 14 }}>Real-time form tracking · AI coaching · Session scoring</div>
-        </div>
+          <div style={{
+  display: "inline-block", marginTop: 8, marginBottom: 16,
+  fontSize: 10, letterSpacing: 3, color: C.accent,
+  textTransform: "uppercase", fontWeight: 600,
+  background: C.accent + "15", padding: "4px 14px", borderRadius: 20,
+  border: `1px solid ${C.accent}30`,
+}}>
+  AI Squat Coach · Phase 1
+</div>
+          <img
+  src={`${process.env.PUBLIC_URL}/formIQ.png`}
+  alt="FormIQ"
+  style={{ height: 90, width: "auto", objectFit: "contain", marginBottom: 10 }}
+/>
+<div style={{ color: C.mutedLight, marginTop: 4, fontSize: 14 }}>
+  Real-time form tracking · AI coaching · Session scoring
+</div>
 
         {/* Camera config */}
         <div className="fu fu2" style={{ marginBottom: 18 }}>
