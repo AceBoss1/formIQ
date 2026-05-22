@@ -33,53 +33,49 @@ const gradeLabel = (s) => s >= 90 ? "Elite" : s >= 82 ? "Excellent" : s >= 75 ? 
 
 const fallback = (s, set, total) =>
   s >= 82
-    ? `Clean set — your mechanics held up well across all 10 reps. The one thing to sharpen: tighten your tempo on the descent, a deliberate 2-count down will build more stability and power out of the hole. ${set < total ? "Stay locked in and make the next set even sharper." : "That's a strong session — you're building real consistency."}`
+    ? `Clean set — your mechanics held up well across all 10 reps. Tighten your tempo on the descent, a deliberate 2-count down will build more stability. ${set < total ? "Stay locked in and make the next set even sharper." : "That's a strong session — you're building real consistency."}`
     : s >= 65
-    ? `You got through the set but form slipped around reps 6-8 as fatigue built in. Drive your knees out hard and keep your chest from collapsing under load — that's the pattern breaking down. ${set < total ? "Reset your breathing during the rest and come back with more intention on the next set." : "Focus on that correction next session — it'll unlock a lot more."}`
-    : `Form broke down significantly in this set — don't grind through bad mechanics. The fix: sit back and down like you're reaching for a box behind you, and brace hard before every rep — you're losing tension at the bottom. ${set < total ? "Take the full rest, reset, and attack the next set with control over weight." : "Prioritize this correction next session before adding load."}`;
+    ? `You got through the set but form slipped around reps 6-8 as fatigue built. Drive your knees out and keep your chest from collapsing. ${set < total ? "Reset your breathing and come back with more intention." : "Focus on that correction next session."}`
+    : `Form broke down significantly — sit back and down like reaching for a box behind you, and brace hard before every rep. ${set < total ? "Take the full rest and attack the next set with control." : "Prioritize this correction next session before adding load."}`;
 
 export default function FormIQ() {
-  const [screen, setScreen]       = useState("setup");
-  const [camMode, setCamMode]     = useState(null);
-  const [totalSets, setTotalSets] = useState(3);
-  const [curSet, setCurSet]       = useState(1);
-  const [reps, setReps]           = useState(0);
-  const [repFlash, setRepFlash]   = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [feedback, setFeedback]   = useState("");
-  const [history, setHistory]     = useState([]);
-  const [metrics, setMetrics]     = useState(null);
-  const [resting, setResting]     = useState(false);
-  const [restT, setRestT]         = useState(0);
+  const [screen, setScreen]         = useState("setup");
+  const [camMode, setCamMode]       = useState(null);
+  const [totalSets, setTotalSets]   = useState(3);
+  const [curSet, setCurSet]         = useState(1);
+  const [reps, setReps]             = useState(0);
+  const [repFlash, setRepFlash]     = useState(false);
+  const [analyzing, setAnalyzing]   = useState(false);
+  const [feedback, setFeedback]     = useState("");
+  const [history, setHistory]       = useState([]);
+  const [metrics, setMetrics]       = useState(null);
+  const [resting, setResting]       = useState(false);
+  const [restT, setRestT]           = useState(0);
   const [finalScore, setFinalScore] = useState(null);
-  const [tipI, setTipI]           = useState(0);
-  const [scan, setScan]           = useState(0);
-  const [dots, setDots]           = useState(0);
+  const [tipI, setTipI]             = useState(0);
+  const [scan, setScan]             = useState(0);
+  const [dots, setDots]             = useState(0);
   const historyRef = useRef([]);
 
   const REPS = 10, REST = 90;
 
-  // Tip rotation
   useEffect(() => {
     if (screen !== "workout") return;
     const t = setInterval(() => setTipI(i => (i + 1) % TIPS.length), 4500);
     return () => clearInterval(t);
   }, [screen]);
 
-  // Scan line animation
   useEffect(() => {
     const t = setInterval(() => setScan(s => (s + 1.2) % 100), 35);
     return () => clearInterval(t);
   }, []);
 
-  // Analyzing dots
   useEffect(() => {
     if (!analyzing) return;
     const t = setInterval(() => setDots(d => (d + 1) % 4), 450);
     return () => clearInterval(t);
   }, [analyzing]);
 
-  // Rest timer
   useEffect(() => {
     if (!resting) return;
     const t = setInterval(() => setRestT(r => {
@@ -130,15 +126,14 @@ export default function FormIQ() {
           max_tokens: 800,
           messages: [{
             role: "user",
-            content: `You are an elite strength and conditioning coach. An athlete just finished Set ${curSet} of ${totalSets} (10 squats). Form sensor data:
+            content: `You are an elite strength coach. Athlete finished Set ${curSet} of ${totalSets} (10 squats).
 Knee Alignment: ${m.kneeAlignment}/100
 Spine Neutrality: ${m.spineNeutrality}/100
 Squat Depth: ${m.squatDepth}/100
 Tempo Control: ${m.tempoConsistency}/100
 Hip Hinge: ${m.hipHinge}/100
 Set Score: ${score}/100
-
-Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the athlete. Sentence 1: Honest assessment of this set. Sentence 2: The single most important correction with a specific physical cue. Sentence 3: A sharp, motivating close${curSet < totalSets ? " for the next set" : " to end the session"}. No lists, no headers, no fluff.`
+Respond in exactly 3 sentences. No lists, no headers.`
           }]
         })
       });
@@ -175,7 +170,7 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
   };
 
   const font = "system-ui, -apple-system, 'Segoe UI', sans-serif";
-  const page = { background: C.bg, color: C.text, minHeight: 600, fontFamily: font };
+  const page = { background: C.bg, color: C.text, minHeight: "100vh", fontFamily: font };
   const card = (accent) => ({
     background: C.surface, borderRadius: 10, padding: "16px 18px",
     border: `1px solid ${accent ? C.accent + "40" : C.border}`,
@@ -192,92 +187,77 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
     textTransform: "uppercase", fontWeight: 600,
   };
 
-  // ══════════════════════════════════════════════════════════
-  // SETUP SCREEN
-  // ══════════════════════════════════════════════════════════
+  // ── SETUP ──────────────────────────────────────────────────
   if (screen === "setup") return (
     <div style={{ ...page, padding: "28px 20px 32px" }}>
       <style>{`
         @keyframes fadeUp { from { opacity:0; transform:translateY(12px) } to { opacity:1; transform:translateY(0) } }
         .fu { animation: fadeUp 0.4s ease forwards; }
-        .fu1 { animation-delay: 0.05s; opacity:0 }
-        .fu2 { animation-delay: 0.12s; opacity:0 }
-        .fu3 { animation-delay: 0.19s; opacity:0 }
-        .fu4 { animation-delay: 0.26s; opacity:0 }
-        .fu5 { animation-delay: 0.33s; opacity:0 }
-        .cam-card:hover { border-color: ${C.accent}88 !important; }
-        .rep-btn:active { transform: scale(0.97); }
+        .fu1 { animation-delay:0.05s; opacity:0 }
+        .fu2 { animation-delay:0.12s; opacity:0 }
+        .fu3 { animation-delay:0.19s; opacity:0 }
+        .fu4 { animation-delay:0.26s; opacity:0 }
+        .fu5 { animation-delay:0.33s; opacity:0 }
+        .cam-card:hover { border-color:${C.accent}88 !important; }
+        .rep-btn:active { transform:scale(0.97); }
       `}</style>
       <div style={{ maxWidth: 560, margin: "0 auto" }}>
-        {/* Logo */}
-        <div className="fu fu1" style={{ textAlign: "center", marginBottom: 36 }}>
-          <div style={{
-  display: "inline-block", marginTop: 8, marginBottom: 16,
-  fontSize: 10, letterSpacing: 3, color: C.accent,
-  textTransform: "uppercase", fontWeight: 600,
-  background: C.accent + "15", padding: "4px 14px", borderRadius: 20,
-  border: `1px solid ${C.accent}30`,
-}}>
-  AI Squat Coach · Phase 1
-</div>
-          <img
-  src={`${process.env.PUBLIC_URL}/formIQ.png`}
-  alt="FormIQ"
-  style={{ height: 90, width: "auto", objectFit: "contain", marginBottom: 10 }}
-/>
-<div style={{ color: C.mutedLight, marginTop: 4, fontSize: 14 }}>
-  Real-time form tracking · AI coaching · Session scoring
-</div>
 
-        {/* Camera config */}
+        {/* ── HERO LOGO ── */}
+        <div className="fu fu1" style={{ textAlign: "center", marginBottom: 36 }}>
+          <img
+            src={`${process.env.PUBLIC_URL}/formIQ.png`}
+            alt="FormIQ"
+            style={{ height: 110, width: "auto", objectFit: "contain", display: "block", margin: "0 auto 14px" }}
+          />
+          <div style={{
+            display: "inline-block",
+            fontSize: 10, letterSpacing: 3, color: C.accent,
+            textTransform: "uppercase", fontWeight: 600,
+            background: C.accent + "15", padding: "4px 14px", borderRadius: 20,
+            border: `1px solid ${C.accent}30`,
+          }}>
+            AI Squat Coach · Phase 1
+          </div>
+          <div style={{ color: C.mutedLight, marginTop: 12, fontSize: 14 }}>
+            Real-time form tracking · AI coaching · Session scoring
+          </div>
+        </div>
+
+        {/* ── CAMERA SETUP ── */}
         <div className="fu fu2" style={{ marginBottom: 18 }}>
           <div style={{ ...label, marginBottom: 10 }}>Camera Setup</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {[
-              {
-                id: "quad-4k",
-                title: "Quad 4K System",
-                lines: ["4× cameras via HDMI", "Front · Back · Left · Right", "Capture card required"],
-                badge: "PRO",
-              },
-              {
-                id: "single",
-                title: "Single Camera",
-                lines: ["Webcam · Mobile · HDMI", "Side-on view recommended", "Plug-and-play ready"],
-                badge: "BASIC",
-              },
+              { id: "quad-4k", title: "Quad 4K System",  lines: ["4× cameras via HDMI", "Front · Back · Left · Right", "Capture card required"], badge: "PRO" },
+              { id: "single",  title: "Single Camera",    lines: ["Webcam · Mobile · HDMI", "Side-on view recommended", "Plug-and-play ready"],   badge: "BASIC" },
             ].map(({ id, title, lines, badge }) => (
               <div
                 key={id}
                 className="cam-card"
                 onClick={() => setCamMode(id)}
                 style={{
-                  ...card(false),
-                  cursor: "pointer", transition: "border-color 0.2s, background 0.2s",
+                  ...card(false), cursor: "pointer", transition: "border-color 0.2s, background 0.2s",
                   border: `1px solid ${camMode === id ? C.accent : C.border}`,
                   background: camMode === id ? "#071510" : C.surface,
                   position: "relative",
                 }}
               >
                 <div style={{
-                  position: "absolute", top: 12, right: 12,
-                  fontSize: 9, fontWeight: 700, letterSpacing: 1.5, padding: "3px 8px", borderRadius: 4,
+                  position: "absolute", top: 12, right: 12, fontSize: 9, fontWeight: 700,
+                  letterSpacing: 1.5, padding: "3px 8px", borderRadius: 4,
                   background: camMode === id ? C.accent : C.s2,
                   color: camMode === id ? "#000" : C.muted,
                 }}>{badge}</div>
                 <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 8 }}>{title}</div>
-                {lines.map((l, i) => (
-                  <div key={i} style={{ fontSize: 12, color: C.mutedLight, lineHeight: 1.7 }}>{l}</div>
-                ))}
-                {camMode === id && (
-                  <div style={{ marginTop: 10, fontSize: 11, color: C.accent, fontWeight: 600 }}>✓ Selected</div>
-                )}
+                {lines.map((l, i) => <div key={i} style={{ fontSize: 12, color: C.mutedLight, lineHeight: 1.7 }}>{l}</div>)}
+                {camMode === id && <div style={{ marginTop: 10, fontSize: 11, color: C.accent, fontWeight: 600 }}>✓ Selected</div>}
               </div>
             ))}
           </div>
         </div>
 
-        {/* Session config */}
+        {/* ── SESSION CONFIG ── */}
         <div className="fu fu3" style={{ ...card(false), marginBottom: 18 }}>
           <div style={{ ...label, marginBottom: 14 }}>Session Config</div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -293,20 +273,20 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
           </div>
         </div>
 
-        {/* Phase note */}
-        <div className="fu fu4" style={{ ...card(false), marginBottom: 20, background: C.s2, border: `1px solid ${C.border}` }}>
+        {/* ── PHASE NOTE ── */}
+        <div className="fu fu4" style={{ ...card(false), marginBottom: 20, background: C.s2 }}>
           <div style={{ display: "flex", gap: 10 }}>
             <div style={{ fontSize: 18, flexShrink: 0 }}>🔬</div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Phase 1 — Simulation Mode</div>
               <div style={{ fontSize: 12, color: C.mutedLight, lineHeight: 1.6 }}>
-                Camera feeds and form metrics are simulated. Phase 2 will integrate MediaPipe Pose for live keypoint tracking from all connected camera inputs.
+                Camera feeds and form metrics are simulated. Phase 2 integrates MediaPipe Pose for live keypoint tracking from all camera inputs.
               </div>
             </div>
           </div>
         </div>
 
-        {/* Start */}
+        {/* ── START ── */}
         <div className="fu fu5">
           <button
             onClick={() => camMode && setScreen("workout")}
@@ -331,9 +311,7 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
     </div>
   );
 
-  // ══════════════════════════════════════════════════════════
-  // WORKOUT SCREEN
-  // ══════════════════════════════════════════════════════════
+  // ── WORKOUT ────────────────────────────────────────────────
   if (screen === "workout") {
     const pct = (reps / REPS) * 100;
 
@@ -343,39 +321,29 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
         aspectRatio: camMode === "quad-4k" ? "4/3" : "16/9",
         display: "flex", alignItems: "center", justifyContent: "center",
       }}>
-        {/* Grid */}
         <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", opacity: 0.07 }} preserveAspectRatio="none">
           {[1,2,3,4,5].map(i => <line key={`v${i}`} x1={`${i*16.66}%`} y1="0" x2={`${i*16.66}%`} y2="100%" stroke={C.accent} strokeWidth="0.5"/>)}
           {[1,2,3].map(i => <line key={`h${i}`} x1="0" y1={`${i*25}%`} x2="100%" y2={`${i*25}%`} stroke={C.accent} strokeWidth="0.5"/>)}
         </svg>
-        {/* Scan line */}
         <div style={{ position:"absolute", left:0, right:0, height:1, top:`${scan}%`, background:`linear-gradient(90deg,transparent,${C.accent}60,transparent)` }}/>
-        {/* Stick figure squat */}
         <svg viewBox="0 0 80 90" width={camMode === "quad-4k" ? "26%" : "14%"} style={{ opacity:0.22 }}>
           <circle cx="40" cy="9" r="7" fill={C.accent}/>
-          {/* Torso slight lean */}
           <line x1="40" y1="16" x2="36" y2="46" stroke={C.accent} strokeWidth="3" strokeLinecap="round"/>
-          {/* Arms forward (barbell hold) */}
           <line x1="38" y1="24" x2="20" y2="30" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round"/>
           <line x1="38" y1="24" x2="56" y2="30" stroke={C.accent} strokeWidth="2.5" strokeLinecap="round"/>
-          {/* Thighs */}
           <line x1="36" y1="46" x2="20" y2="62" stroke={C.accent} strokeWidth="3" strokeLinecap="round"/>
           <line x1="36" y1="46" x2="52" y2="62" stroke={C.accent} strokeWidth="3" strokeLinecap="round"/>
-          {/* Shins */}
           <line x1="20" y1="62" x2="14" y2="82" stroke={C.accent} strokeWidth="3" strokeLinecap="round"/>
           <line x1="52" y1="62" x2="58" y2="82" stroke={C.accent} strokeWidth="3" strokeLinecap="round"/>
-          {/* Feet */}
           <line x1="14" y1="82" x2="5"  y2="85" stroke={C.accent} strokeWidth="2" strokeLinecap="round"/>
           <line x1="58" y1="82" x2="67" y2="85" stroke={C.accent} strokeWidth="2" strokeLinecap="round"/>
-          {/* Barbell */}
-          <line x1="4" y1="25" x2="72" y2="25" stroke={C.accent} strokeWidth="4" strokeLinecap="round"/>
+          <line x1="4"  y1="25" x2="72" y2="25" stroke={C.accent} strokeWidth="4" strokeLinecap="round"/>
           <circle cx="4"  cy="25" r="5" fill="none" stroke={C.accent} strokeWidth="2"/>
           <circle cx="72" cy="25" r="5" fill="none" stroke={C.accent} strokeWidth="2"/>
         </svg>
-        {/* Corner brackets */}
         {[
-          { top:7, left:7,  bt:true, bl:true },
-          { top:7, right:7, bt:true, br:true },
+          { top:7, left:7,   bt:true, bl:true },
+          { top:7, right:7,  bt:true, br:true },
           { bottom:7, left:7,  bb:true, bl:true },
           { bottom:7, right:7, bb:true, br:true },
         ].map(({ top, left, right, bottom, bt, br, bb, bl }, i) => (
@@ -387,43 +355,30 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
             borderLeft:   bl ? `2px solid ${C.accent}` : "none",
           }}/>
         ))}
-        {/* Label */}
         <div style={{ position:"absolute", bottom:7, left:9, fontSize:9, color:C.accent, letterSpacing:2, fontWeight:700 }}>{lbl}</div>
-        {/* Live */}
         <div style={{ position:"absolute", top:8, right:9, display:"flex", alignItems:"center", gap:4 }}>
           <div style={{ width:5, height:5, borderRadius:"50%", background:"#FF3B3B" }}/>
           <span style={{ fontSize:9, color:C.muted, letterSpacing:1 }}>LIVE</span>
         </div>
-        {/* Angle tag for quad */}
-        {angle && (
-          <div style={{ position:"absolute", top:8, left:9, fontSize:9, color:C.muted, letterSpacing:1 }}>{angle}</div>
-        )}
+        {angle && <div style={{ position:"absolute", top:8, left:9, fontSize:9, color:C.muted, letterSpacing:1 }}>{angle}</div>}
       </div>
     );
 
     return (
       <div style={{ ...page }}>
-        {/* Camera feeds */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: camMode === "quad-4k" ? "1fr 1fr" : "1fr",
-          gap: 1.5, background: "#000",
-        }}>
-          {camMode === "quad-4k" ? (
-            [
-              { label:"FRONT",      angle:"CAM-1 · 4K" },
-              { label:"BACK",       angle:"CAM-2 · 4K" },
-              { label:"LEFT SIDE",  angle:"CAM-3 · 4K" },
-              { label:"RIGHT SIDE", angle:"CAM-4 · 4K" },
-            ].map(({ label: lbl, angle }) => <CamFeed key={lbl} label={lbl} angle={angle}/>)
-          ) : (
-            <CamFeed label="MAIN CAMERA" />
-          )}
+        <div style={{ display:"grid", gridTemplateColumns: camMode==="quad-4k" ? "1fr 1fr" : "1fr", gap:1.5, background:"#000" }}>
+          {camMode === "quad-4k"
+            ? [
+                { label:"FRONT",      angle:"CAM-1 · 4K" },
+                { label:"BACK",       angle:"CAM-2 · 4K" },
+                { label:"LEFT SIDE",  angle:"CAM-3 · 4K" },
+                { label:"RIGHT SIDE", angle:"CAM-4 · 4K" },
+              ].map(({ label: lbl, angle }) => <CamFeed key={lbl} label={lbl} angle={angle}/>)
+            : <CamFeed label="MAIN CAMERA" />
+          }
         </div>
 
-        {/* Controls panel */}
-        <div style={{ padding: "18px 20px 24px", background: C.bg }}>
-          {/* Header row */}
+        <div style={{ padding:"18px 20px 24px", background:C.bg }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:14 }}>
             <div>
               <div style={{ ...label, marginBottom:8 }}>Set {curSet} of {totalSets}</div>
@@ -431,61 +386,47 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
                 {[...Array(totalSets)].map((_,i) => (
                   <div key={i} style={{
                     width:26, height:4, borderRadius:2,
-                    background: i < curSet-1 ? C.accent : i === curSet-1 ? C.accent+"55" : C.s2,
-                    border: i === curSet-1 ? `1px solid ${C.accent}66` : "1px solid transparent",
+                    background: i < curSet-1 ? C.accent : i===curSet-1 ? C.accent+"55" : C.s2,
                   }}/>
                 ))}
               </div>
             </div>
             <div style={{ textAlign:"right" }}>
               <div style={{ ...label, marginBottom:3 }}>Reps</div>
-              <div style={{
-                fontSize:50, fontWeight:900, lineHeight:1, letterSpacing:-3,
-                color: repFlash ? C.accent : C.text, transition:"color 0.12s",
-              }}>
+              <div style={{ fontSize:50, fontWeight:900, lineHeight:1, letterSpacing:-3, color:repFlash?C.accent:C.text, transition:"color 0.12s" }}>
                 {reps}<span style={{ fontSize:22, color:C.muted, fontWeight:400 }}>/{REPS}</span>
               </div>
             </div>
           </div>
 
-          {/* Progress bar */}
           <div style={{ height:3, background:C.s2, borderRadius:2, marginBottom:14, overflow:"hidden" }}>
             <div style={{ height:"100%", width:`${pct}%`, background:C.accent, borderRadius:2, transition:"width 0.28s ease" }}/>
           </div>
 
-          {/* Rep dots */}
           <div style={{ display:"flex", gap:5, marginBottom:14 }}>
             {[...Array(REPS)].map((_,i) => (
-              <div key={i} style={{
-                flex:1, height:6, borderRadius:2,
-                background: i < reps ? C.accent : C.s2,
-                transition:"background 0.15s",
-              }}/>
+              <div key={i} style={{ flex:1, height:6, borderRadius:2, background:i<reps?C.accent:C.s2, transition:"background 0.15s" }}/>
             ))}
           </div>
 
-          {/* Live tip */}
           <div style={{ ...card(false), marginBottom:14, padding:"11px 14px", display:"flex", gap:10, alignItems:"flex-start" }}>
             <div style={{ color:C.accent, fontSize:13, flexShrink:0, marginTop:1 }}>▸</div>
             <div style={{ fontSize:13, color:"#C8C8C8", lineHeight:1.5 }}>{TIPS[tipI]}</div>
           </div>
 
-          {/* Tap button */}
           <button
             className="rep-btn"
             onClick={tapRep}
             disabled={reps >= REPS}
             style={{
               width:"100%", padding:"20px", fontSize:16, fontWeight:800,
-              background: reps >= REPS ? C.s2 : C.accent,
-              color: reps >= REPS ? C.muted : "#000",
-              border:"none", borderRadius:10, cursor: reps >= REPS ? "default" : "pointer",
+              background: reps>=REPS ? C.s2 : C.accent,
+              color: reps>=REPS ? C.muted : "#000",
+              border:"none", borderRadius:10, cursor:reps>=REPS?"default":"pointer",
               letterSpacing:2, textTransform:"uppercase", transition:"all 0.2s",
             }}
           >
-            {reps >= REPS
-              ? "Set complete — calculating score..."
-              : `TAP EACH REP  ·  ${REPS - reps} REMAINING`}
+            {reps >= REPS ? "Set complete — calculating score..." : `TAP EACH REP  ·  ${REPS - reps} REMAINING`}
           </button>
 
           <div style={{ textAlign:"center", marginTop:10, fontSize:11, color:C.muted }}>
@@ -496,9 +437,7 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
     );
   }
 
-  // ══════════════════════════════════════════════════════════
-  // ANALYSIS SCREEN
-  // ══════════════════════════════════════════════════════════
+  // ── ANALYSIS ───────────────────────────────────────────────
   if (screen === "analysis") {
     const score = metrics ? calcScore(metrics) : 0;
     const restRemaining = REST - restT;
@@ -507,24 +446,17 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
     return (
       <div style={{ ...page, padding:"24px 20px 32px" }}>
         <div style={{ maxWidth:560, margin:"0 auto" }}>
-          {/* Score hero */}
+
           <div style={{ textAlign:"center", marginBottom:26, paddingTop:6 }}>
             <div style={{ ...label, marginBottom:12 }}>Set {curSet} · {REPS} reps · Complete</div>
-            <div style={{
-              fontSize:88, fontWeight:900, letterSpacing:-5, lineHeight:1,
-              color: analyzing ? C.muted : mc(score),
-              transition:"color 0.5s",
-            }}>
+            <div style={{ fontSize:88, fontWeight:900, letterSpacing:-5, lineHeight:1, color:analyzing?C.muted:mc(score), transition:"color 0.5s" }}>
               {analyzing ? "—" : score}
             </div>
-            <div style={{ fontSize:16, color: analyzing ? C.muted : mc(score), fontWeight:700, marginTop:4 }}>
-              {analyzing
-                ? `Analyzing form${".".repeat(dots)}`
-                : `${grade(score)}  ·  ${gradeLabel(score)}`}
+            <div style={{ fontSize:16, color:analyzing?C.muted:mc(score), fontWeight:700, marginTop:4 }}>
+              {analyzing ? `Analyzing form${".".repeat(dots)}` : `${grade(score)}  ·  ${gradeLabel(score)}`}
             </div>
           </div>
 
-          {/* Metrics breakdown */}
           {metrics && (
             <div style={{ ...card(false), marginBottom:14 }}>
               <div style={{ ...label, marginBottom:16 }}>Form Analysis · Set {curSet}</div>
@@ -548,46 +480,34 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
             </div>
           )}
 
-          {/* AI Coach feedback */}
           <div style={{ ...card(true), marginBottom:14 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12 }}>
-              <div style={{
-                width:22, height:22, borderRadius:6, background:C.accent,
-                display:"flex", alignItems:"center", justifyContent:"center", fontSize:13,
-              }}>⚡</div>
+              <div style={{ width:22, height:22, borderRadius:6, background:C.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13 }}>⚡</div>
               <span style={{ ...label, color:C.accent }}>AI Coach · Claude</span>
               {analyzing && <span style={{ fontSize:11, color:C.muted, marginLeft:4 }}>thinking{".".repeat(dots)}</span>}
             </div>
-            <p style={{ margin:0, fontSize:14, lineHeight:1.75, color: analyzing ? C.muted : "#D8D8D8" }}>
-              {analyzing
-                ? "Processing your squat mechanics across all 10 reps..."
-                : feedback}
+            <p style={{ margin:0, fontSize:14, lineHeight:1.75, color:analyzing?C.muted:"#D8D8D8" }}>
+              {analyzing ? "Processing your squat mechanics across all 10 reps..." : feedback}
             </p>
           </div>
 
-          {/* Rest timer */}
           {resting && (
             <div style={{ ...card(false), marginBottom:14, display:"flex", alignItems:"center", gap:16 }}>
               <div style={{ flexShrink:0 }}>
                 <div style={{ ...label, marginBottom:4 }}>Rest Timer</div>
-                <div style={{ fontSize:34, fontWeight:900, color: restRemaining < 20 ? C.warn : C.text }}>
-                  {restRemaining}s
-                </div>
+                <div style={{ fontSize:34, fontWeight:900, color:restRemaining<20?C.warn:C.text }}>{restRemaining}s</div>
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ height:4, background:C.s2, borderRadius:2, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${restPct}%`, background: restRemaining < 20 ? C.warn : C.accent, transition:"width 1s linear", borderRadius:2 }}/>
+                  <div style={{ height:"100%", width:`${restPct}%`, background:restRemaining<20?C.warn:C.accent, transition:"width 1s linear", borderRadius:2 }}/>
                 </div>
                 <div style={{ fontSize:11, color:C.muted, marginTop:6 }}>
-                  {restRemaining > 0
-                    ? `Next set starts when timer reaches 0, or tap below to start early`
-                    : "Rest complete — ready for the next set"}
+                  {restRemaining > 0 ? "Tap below to start the next set early" : "Rest complete — ready for next set"}
                 </div>
               </div>
             </div>
           )}
 
-          {/* Set comparison (if 2+ sets done) */}
           {history.length >= 2 && (
             <div style={{ ...card(false), marginBottom:14 }}>
               <div style={{ ...label, marginBottom:12 }}>Progress This Session</div>
@@ -605,7 +525,6 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
             </div>
           )}
 
-          {/* Action */}
           {!analyzing && (
             <button
               onClick={nextSet}
@@ -623,9 +542,7 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
     );
   }
 
-  // ══════════════════════════════════════════════════════════
-  // RESULTS SCREEN
-  // ══════════════════════════════════════════════════════════
+  // ── RESULTS ────────────────────────────────────────────────
   const fs = finalScore ?? 0;
   const gc = mc(fs);
   const avgMetrics = METRICS_DEF.map(({ key, label: lbl }) => ({
@@ -633,35 +550,34 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
     avg: history.length ? Math.round(history.reduce((s, e) => s + e.metrics[key], 0) / history.length) : 0,
   }));
   const mostImproved = avgMetrics.reduce((a, b) => {
-    const aGain = history.length >= 2 ? history[history.length-1].metrics[a.key] - history[0].metrics[a.key] : 0;
-    const bGain = history.length >= 2 ? history[history.length-1].metrics[b.key] - history[0].metrics[b.key] : 0;
-    return bGain > aGain ? b : a;
+    const aG = history.length >= 2 ? history[history.length-1].metrics[a.key] - history[0].metrics[a.key] : 0;
+    const bG = history.length >= 2 ? history[history.length-1].metrics[b.key] - history[0].metrics[b.key] : 0;
+    return bG > aG ? b : a;
   });
 
   return (
     <div style={{ ...page, padding:"24px 20px 36px" }}>
       <div style={{ maxWidth:560, margin:"0 auto" }}>
-        {/* Final score hero */}
+
         <div style={{ textAlign:"center", padding:"20px 0 28px" }}>
+          <img
+            src={`${process.env.PUBLIC_URL}/formIQ.png`}
+            alt="FormIQ"
+            style={{ height: 60, width:"auto", objectFit:"contain", display:"block", margin:"0 auto 20px", opacity:0.85 }}
+          />
           <div style={{ ...label, marginBottom:14 }}>Session Complete</div>
           <div style={{ fontSize:104, fontWeight:900, letterSpacing:-6, color:gc, lineHeight:1 }}>{fs}</div>
           <div style={{ fontSize:24, color:gc, fontWeight:700, marginTop:6 }}>{grade(fs)}  ·  {gradeLabel(fs)}</div>
           <div style={{ color:C.muted, marginTop:8, fontSize:13 }}>
-            {totalSets} sets  ·  {totalSets * REPS} total reps  ·  {camMode === "quad-4k" ? "Quad 4K" : "Single Camera"}
+            {totalSets} sets · {totalSets * REPS} total reps · {camMode === "quad-4k" ? "Quad 4K" : "Single Camera"}
           </div>
         </div>
 
-        {/* Set breakdown */}
         <div style={{ ...card(false), marginBottom:14 }}>
           <div style={{ ...label, marginBottom:16 }}>Set-by-Set Results</div>
           {history.map(({ setNumber: sn, score: sc }) => (
             <div key={sn} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
-              <div style={{
-                width:36, height:36, borderRadius:8, flexShrink:0,
-                background: mc(sc) + "18",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                color: mc(sc), fontWeight:800, fontSize:12,
-              }}>S{sn}</div>
+              <div style={{ width:36, height:36, borderRadius:8, flexShrink:0, background:mc(sc)+"18", display:"flex", alignItems:"center", justifyContent:"center", color:mc(sc), fontWeight:800, fontSize:12 }}>S{sn}</div>
               <div style={{ flex:1 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
                   <span style={{ fontSize:13, color:C.mutedLight }}>Set {sn}</span>
@@ -678,18 +594,13 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
           ))}
         </div>
 
-        {/* Metric averages */}
         <div style={{ ...card(false), marginBottom:14 }}>
           <div style={{ ...label, marginBottom:14 }}>Session Averages</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
             {avgMetrics.map(({ key, label: lbl, avg }) => (
               <div key={key} style={{ background:C.s2, borderRadius:8, padding:"12px 14px", position:"relative" }}>
                 {key === mostImproved.key && history.length >= 2 && (
-                  <div style={{
-                    position:"absolute", top:8, right:8,
-                    fontSize:9, color:C.accent, background:C.accent+"18",
-                    padding:"1px 6px", borderRadius:4, fontWeight:700, letterSpacing:1,
-                  }}>+MOST</div>
+                  <div style={{ position:"absolute", top:8, right:8, fontSize:9, color:C.accent, background:C.accent+"18", padding:"1px 6px", borderRadius:4, fontWeight:700, letterSpacing:1 }}>+MOST</div>
                 )}
                 <div style={{ fontSize:11, color:C.muted, marginBottom:5 }}>{lbl}</div>
                 <div style={{ fontSize:26, fontWeight:900, color:mc(avg), lineHeight:1 }}>{avg}</div>
@@ -701,8 +612,7 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
           </div>
         </div>
 
-        {/* Next steps card */}
-        <div style={{ ...card(false), marginBottom:20, background:C.s2, border:`1px solid ${C.border}` }}>
+        <div style={{ ...card(false), marginBottom:20, background:C.s2 }}>
           <div style={{ ...label, marginBottom:10 }}>Roadmap — Coming in Phase 2</div>
           {[
             "Live MediaPipe Pose tracking on all camera inputs",
@@ -718,34 +628,16 @@ Respond in exactly 3 sentences as a direct, no-nonsense coach speaking to the at
           ))}
         </div>
 
-        {/* Buttons */}
         <div style={{ display:"flex", gap:10 }}>
           <button
             onClick={restart}
-            style={{
-              flex:1, padding:"17px", fontSize:14, fontWeight:800,
-              background:C.accent, color:"#000", border:"none",
-              borderRadius:10, cursor:"pointer", letterSpacing:2, textTransform:"uppercase",
-            }}
+            style={{ flex:1, padding:"17px", fontSize:14, fontWeight:800, background:C.accent, color:"#000", border:"none", borderRadius:10, cursor:"pointer", letterSpacing:2, textTransform:"uppercase" }}
           >
             New Session
           </button>
           <button
-            onClick={() => {
-              const lines = [
-                `FormIQ Session Results`,
-                `Score: ${fs}/100 (${grade(fs)} · ${gradeLabel(fs)})`,
-                `${totalSets} sets · ${totalSets * REPS} reps`,
-                ...history.map(h => `  Set ${h.setNumber}: ${h.score}/100`),
-                `Weakest area: ${avgMetrics.reduce((a,b)=>a.avg<b.avg?a:b).label}`,
-              ];
-              alert(lines.join("\n"));
-            }}
-            style={{
-              flex:1, padding:"17px", fontSize:14, fontWeight:700,
-              background:C.s2, color:C.text, border:`1px solid ${C.border}`,
-              borderRadius:10, cursor:"pointer", letterSpacing:1.5, textTransform:"uppercase",
-            }}
+            onClick={() => alert(`FormIQ Session\nScore: ${fs}/100 (${grade(fs)})\n${totalSets} sets · ${totalSets*REPS} reps\n${history.map(h=>`Set ${h.setNumber}: ${h.score}/100`).join("\n")}`)}
+            style={{ flex:1, padding:"17px", fontSize:14, fontWeight:700, background:C.s2, color:C.text, border:`1px solid ${C.border}`, borderRadius:10, cursor:"pointer", letterSpacing:1.5, textTransform:"uppercase" }}
           >
             Share Results
           </button>
