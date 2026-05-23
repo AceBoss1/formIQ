@@ -5,6 +5,8 @@ export default function FormIQ(){
 
   const [view, setView] = useState("coach");
 
+  const [screen,setScreen] = useState("setup");
+
 const C = {
   bg:"#080808", surface:"#111111", s2:"#1A1A1A", s3:"#222222",
   border:"#272727", accent:"#00E676", warn:"#FFB300", danger:"#FF3D3D",
@@ -382,7 +384,7 @@ if (view === "dashboard") {
   return <TrainerDashboard onBack={() => setView("coach")} />;
 }
 
-  return(
+return (
     <div style={{position:"fixed",inset:0,background:"#000000E8",zIndex:9999,display:"flex",flexDirection:"column"}}>
       <div style={{background:"#111",borderBottom:"1px solid #222",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
         <div>
@@ -592,7 +594,7 @@ function ShareModal({canvas,onClose}){
 // ══════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════
-export default function FormIQ(){
+
   const [screen,setScreen]         = useState("setup");
   const [camMode,setCamMode]       = useState(null);
   const [totalSets,setTotalSets]   = useState(3);
