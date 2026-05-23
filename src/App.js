@@ -206,7 +206,7 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
 
   // AI badge
   ctx.font="bold 9px system-ui";
-  ctx.fillStyle="#555";
+  ctx.fillStyle="#AAAAAA";
   ctx.textAlign="left";
   ctx.fillText("AI SQUAT COACH  ·  PHASE 2", infoX, iyp);
   iyp+=22;
@@ -228,7 +228,7 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
   // Date
   const dateStr=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
   ctx.font="13px system-ui";
-  ctx.fillStyle="#555";
+  ctx.fillStyle="#BBBBBB";
   ctx.textAlign="left";
   ctx.fillText(dateStr, infoX, iyp);
   iyp+=22;
@@ -240,13 +240,13 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
 
   let yp = ROW1_H + 30;
 
-// ── Full-width accent divider ────────────────────────────────────────────
-  const divGrad=ctx.createLinearGradient(0,0,W,0);
-  divGrad.addColorStop(0,ACCENT+"00");
-  divGrad.addColorStop(0.3,ACCENT+"88");
-  divGrad.addColorStop(0.7,ACCENT+"88");
-  divGrad.addColorStop(1,ACCENT+"00");
-  ctx.fillStyle=divGrad;
+  // ── Full-width accent divider ────────────────────────────────────────────
+  const grad=ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0,ACCENT+"00");
+  grad.addColorStop(0.3,ACCENT+"88");
+  grad.addColorStop(0.7,ACCENT+"88");
+  grad.addColorStop(1,ACCENT+"00");
+  ctx.fillStyle=grad;
   ctx.fillRect(0,yp,W,2);
   yp+=18;
 
@@ -276,13 +276,13 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
   ctx.fillText(`${grade(finalScore)}  ·  ${gLabel(finalScore)}`,W/2,yp+138);
   // Sets/reps
   ctx.font="12px system-ui";
-  ctx.fillStyle="#555";
+  ctx.fillStyle="#AAAAAA";
   ctx.fillText(`${totalSets} SETS  ·  ${totalSets*REPS} REPS`,W/2,yp+162);
   yp+=bh+28;
 
   // ── Set breakdown ─────────────────────────────────────────────────────────
   ctx.font="bold 10px system-ui";
-  ctx.fillStyle="#444";
+  ctx.fillStyle="#AAAAAA";
   ctx.textAlign="left";
   ctx.fillText("SET-BY-SET BREAKDOWN",60,yp);
   yp+=18;
@@ -313,14 +313,14 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
     ctx.fillText(sc,sx+setW/2,yp+44);
     // label
     ctx.font="10px system-ui";
-    ctx.fillStyle="#555";
+    ctx.fillStyle="#AAAAAA";
     ctx.fillText(`S${sn}${up?" ●":""}`,sx+setW/2,yp+16);
   });
   yp+=76+24;
 
   // ── Metric bars ───────────────────────────────────────────────────────────
   ctx.font="bold 10px system-ui";
-  ctx.fillStyle="#444";
+  ctx.fillStyle="#AAAAAA";
   ctx.textAlign="left";
   ctx.fillText("FORM BREAKDOWN — SESSION AVERAGE",60,yp);
   yp+=18;
@@ -411,17 +411,17 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
   ctx.restore();
 
   ctx.font="13px system-ui";
-  ctx.fillStyle="#888888";
+  ctx.fillStyle="#CCCCCC";
   const line1=`Grade ${grade(finalScore)} · ${gLabel(finalScore)} · ${totalSets} sets · ${totalSets*REPS} reps`;
   ctx.fillText(line1,invX,yp+78);
 
   ctx.font="12px system-ui";
-  ctx.fillStyle="#666666";
+  ctx.fillStyle="#AAAAAA";
   ctx.fillText("FormIQ uses AI + live camera pose tracking to analyse",invX,yp+104);
   ctx.fillText("your squat form in real time and coach you after every set.",invX,yp+120);
 
   ctx.font="11px system-ui";
-  ctx.fillStyle=ACCENT+"AA";
+  ctx.fillStyle=ACCENT;
   ctx.fillText(`Try it free at ${SITE}`,invX,yp+140);
 
   // CTA button
@@ -449,10 +449,10 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
   yp+=18;
 
   ctx.font="11px system-ui";
-  ctx.fillStyle="#2A2A2A";
+  ctx.fillStyle="#888888";
   ctx.fillText("AI Squat Form Tracking  ·  Real-time Coaching  ·  Session Scoring",W/2,yp);
   yp+=16;
-  ctx.fillStyle="#222";
+  ctx.fillStyle="#666666";
   ctx.fillText(`Generated ${new Date().toLocaleString()}`,W/2,yp);
 
   // Bottom accent bar
@@ -529,35 +529,51 @@ function ScreenNameModal({value,onSave}){
 
 // ── Share Report Modal ────────────────────────────────────────────────────
 function ShareModal({canvas,onClose}){
-  const [sharing,setSharing]=useState(false);
-  const [copied,setCopied]=useState(false);
+  const [status,setStatus]=useState("idle"); // idle|sharing|done|error
+  const [errMsg,setErrMsg]=useState("");
   const previewUrl=canvas.toDataURL("image/png");
 
   const getPngBlob=()=>new Promise(res=>canvas.toBlob(res,"image/png"));
 
-  const shareNative=async()=>{
-    setSharing(true);
+  // ── Primary: Web Share API with image file ────────────────────────────
+  // Opens the OS native share sheet (WhatsApp, Telegram, Instagram, etc.)
+  // The user picks the app — we never hard-code a destination.
+  const shareViaSheet=async()=>{
+    setStatus("sharing"); setErrMsg("");
     try{
       const blob=await getPngBlob();
       const file=new File([blob],"FormIQ-Session-Report.png",{type:"image/png"});
-      if(navigator.canShare&&navigator.canShare({files:[file]})){
-        await navigator.share({
-          title:"My FormIQ Squat Session Report",
-          text:`I just tracked my squat form with FormIQ AI — check my report and try it yourself at ${SITE} 🏋️`,
-          files:[file],
-        });
-      } else {
-        // Fallback: share URL only
+      const shareData={
+        title:"My FormIQ Squat Session",
+        text:`Check out my squat form report from FormIQ AI 🏋️ — try it free at https://${SITE}`,
+        files:[file],
+      };
+      // canShare guards — some desktop browsers don't support file sharing
+      if(navigator.share && navigator.canShare && navigator.canShare(shareData)){
+        await navigator.share(shareData);
+        setStatus("done");
+      } else if(navigator.share){
+        // File share not supported — share text+URL only (still opens native sheet)
         await navigator.share({
           title:"FormIQ — AI Squat Coach",
-          text:`I just scored on FormIQ's AI squat tracker! Try it free at ${SITE} 🏋️`,
+          text:`I just tracked my squat form with FormIQ AI 🏋️ — try it free at https://${SITE}`,
           url:`https://${SITE}`,
         });
+        setStatus("done");
+      } else {
+        // Desktop browser with no Web Share API — fall through to download
+        setErrMsg("Your browser doesn't support native sharing. Download the PNG and share it manually.");
+        setStatus("error");
       }
     } catch(e){
-      if(e.name!=="AbortError") downloadPng();
+      if(e.name==="AbortError"){
+        // User cancelled the share sheet — reset silently
+        setStatus("idle");
+      } else {
+        setErrMsg("Sharing failed. Download the image below and share it yourself.");
+        setStatus("error");
+      }
     }
-    setSharing(false);
   };
 
   const downloadPng=async()=>{
@@ -566,78 +582,87 @@ function ShareModal({canvas,onClose}){
     const a=document.createElement("a");
     a.href=url; a.download="FormIQ-Session-Report.png"; a.click();
     URL.revokeObjectURL(url);
+    setStatus("idle");
   };
 
-  const copyLink=async()=>{
-    try{
-      await navigator.clipboard.writeText(`https://${SITE}`);
-      setCopied(true); setTimeout(()=>setCopied(false),2000);
-    }catch{}
-  };
-
-  const btnStyle=(bg,col,border)=>({
-    display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-    width:"100%",padding:"14px",background:bg,color:col,
-    border:border||"none",borderRadius:10,fontWeight:700,
-    fontSize:14,cursor:"pointer",letterSpacing:1,
-    textTransform:"uppercase",marginBottom:10,
-  });
+  const btn=(bg,col,border,onClick,disabled,children)=>(
+    <button onClick={onClick} disabled={disabled} style={{
+      display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+      width:"100%",padding:"15px",background:disabled?"#1A1A1A":bg,
+      color:disabled?"#444":col,border:border||"none",borderRadius:10,
+      fontWeight:700,fontSize:14,cursor:disabled?"default":"pointer",
+      letterSpacing:1,textTransform:"uppercase",marginBottom:10,
+      transition:"opacity .2s",opacity:disabled?.6:1,
+    }}>{children}</button>
+  );
 
   return(
-    <div style={{position:"fixed",inset:0,background:"#000000DD",
-      display:"flex",alignItems:"flex-end",justifyContent:"center",
-      zIndex:9999,padding:"0 0 0 0"}}>
+    <div style={{position:"fixed",inset:0,background:"#000000E0",
+      display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:9999}}>
       <div style={{background:"#111",borderTop:"1px solid #272727",
         borderRadius:"20px 20px 0 0",width:"100%",maxWidth:560,
-        padding:"24px 20px 40px",maxHeight:"90vh",overflowY:"auto"}}>
+        padding:"20px 20px 40px",maxHeight:"92vh",overflowY:"auto"}}>
 
-        {/* Handle */}
-        <div style={{width:36,height:4,background:"#333",borderRadius:2,
-          margin:"0 auto 20px"}}/>
+        {/* Drag handle */}
+        <div style={{width:36,height:4,background:"#333",borderRadius:2,margin:"0 auto 18px"}}/>
 
-        <div style={{fontSize:15,fontWeight:700,color:"#F0F0F0",
-          marginBottom:4,textAlign:"center"}}>Share Your Session Report</div>
-        <div style={{fontSize:12,color:"#555",textAlign:"center",marginBottom:16}}>
-          Invite friends to try FormIQ
+        <div style={{fontSize:15,fontWeight:700,color:"#F0F0F0",marginBottom:3,textAlign:"center"}}>
+          Share Session Report
+        </div>
+        <div style={{fontSize:12,color:"#777",textAlign:"center",marginBottom:16}}>
+          Your device will open a share sheet — pick any app
         </div>
 
-        {/* Report preview */}
-        <div style={{borderRadius:10,overflow:"hidden",marginBottom:20,
-          border:"1px solid #222",background:"#000"}}>
-          <img src={previewUrl} alt="Report preview"
-            style={{width:"100%",display:"block"}}/>
+        {/* Report preview thumbnail */}
+        <div style={{borderRadius:10,overflow:"hidden",marginBottom:18,
+          border:"1px solid #222",background:"#000",maxHeight:320,overflowY:"hidden"}}>
+          <img src={previewUrl} alt="Report" style={{width:"100%",display:"block"}}/>
         </div>
 
-        {/* Share buttons */}
-        {"share" in navigator&&(
-          <button onClick={shareNative} disabled={sharing}
-            style={btnStyle("#00E676","#000")}>
-            <span style={{fontSize:18}}>📤</span>
-            {sharing?"Sharing...":"Share to WhatsApp / Any App"}
-          </button>
+        {/* Error message */}
+        {errMsg&&(
+          <div style={{background:"#FF3D3D18",border:"1px solid #FF3D3D40",
+            borderRadius:8,padding:"10px 14px",marginBottom:12,
+            fontSize:12,color:"#FF8888",lineHeight:1.5}}>{errMsg}</div>
         )}
 
-        <button onClick={downloadPng}
-          style={btnStyle("#1A1A1A","#F0F0F0","1px solid #333")}>
-          <span style={{fontSize:18}}>⬇️</span>
-          Download as PNG
-        </button>
+        {/* ── MAIN SHARE BUTTON ── */}
+        {btn(
+          "#00E676","#000","none",
+          shareViaSheet,
+          status==="sharing",
+          <>
+            <span style={{fontSize:20}}>
+              {status==="sharing"?"⏳":status==="done"?"✅":"📤"}
+            </span>
+            <span>
+              {status==="sharing"?"Opening share sheet..."
+               :status==="done"?"Shared successfully!"
+               :"Share via WhatsApp / Telegram / Any App"}
+            </span>
+          </>
+        )}
 
-        <button onClick={copyLink}
-          style={btnStyle("#1A1A1A",copied?"#00E676":"#F0F0F0","1px solid #333")}>
-          <span style={{fontSize:18}}>{copied?"✓":"🔗"}</span>
-          {copied?`Copied! ${SITE}`:`Copy FormIQ Link`}
-        </button>
-
-        <div style={{textAlign:"center",marginTop:4,marginBottom:16}}>
-          <span style={{fontSize:11,color:"#333"}}>
-            Report is generated as a PNG image — share anywhere your device supports
-          </span>
+        {/* How it works note */}
+        <div style={{background:"#1A1A1A",border:"1px solid #272727",
+          borderRadius:8,padding:"10px 14px",marginBottom:10}}>
+          <div style={{fontSize:11,color:"#888",lineHeight:1.7}}>
+            <strong style={{color:"#AAA"}}>How it works:</strong> Tapping the button above opens your device's
+            native share sheet — the same one you use to share photos. Select WhatsApp, Telegram,
+            Instagram, or any other app. The full report image is attached automatically.
+          </div>
         </div>
+
+        {/* Download fallback */}
+        {btn(
+          "#1A1A1A","#CCC","1px solid #333",
+          downloadPng, false,
+          <><span style={{fontSize:18}}>⬇️</span><span>Download PNG (share manually)</span></>
+        )}
 
         <button onClick={onClose}
           style={{width:"100%",padding:"13px",background:"transparent",
-            color:"#555",border:"none",cursor:"pointer",fontSize:13}}>
+            color:"#555",border:"none",cursor:"pointer",fontSize:13,marginTop:4}}>
           Close
         </button>
       </div>
