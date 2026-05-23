@@ -28,7 +28,7 @@ const TIPS = [
   "Fill your belly with air before the descent",
 ];
 
-const SITE = "formiq.app";
+const SITE = "formiqapp.space";
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 const mc     = (v) => v>=80?C.accent:v>=60?C.warn:C.danger;
@@ -105,7 +105,7 @@ const BONES=[[11,12],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],
 const KEY_POINTS=[11,12,23,24,25,26,27,28];
 
 // ── Report canvas generator ───────────────────────────────────────────────
-const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS, logoImg }) => {
+const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS, logoImg, logo512Img }) => {
   const W=800, H=1200;
   const canvas=document.createElement("canvas");
   canvas.width=W; canvas.height=H;
@@ -131,61 +131,82 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
   ctx.fillStyle=grad;
   ctx.fillRect(0,0,W,4);
 
-  // ── Logo ────────────────────────────────────────────────────────────────
-  let yp=38;
+  // ── ROW 1: Logo LEFT · Session info RIGHT ───────────────────────────────
+  const ROW1_H = 160;
+  const PAD    = 40;
+  const logoW  = 160, logoH = 160;
+
+  // Logo — left side, big and clear
   if(logoImg){
-    const lw=120,lh=120;
-    const lx=(W-lw)/2;
-    try{ctx.drawImage(logoImg,lx,yp,lw,lh);}catch{}
-    yp+=lh+16;
+    try{ ctx.drawImage(logoImg, PAD, 20, logoW, logoH); }catch{}
   } else {
     ctx.fillStyle="#FFFFFF";
-    ctx.font="bold 42px system-ui";
-    ctx.textAlign="center";
-    ctx.fillText("FormIQ",W/2,yp+40);
-    yp+=70;
+    ctx.font="bold 36px system-ui";
+    ctx.textAlign="left";
+    ctx.fillText("FormIQ", PAD, 90);
   }
 
-  // ── AI SQUAT COACH label ─────────────────────────────────────────────────
-  ctx.font="bold 11px system-ui";
-  ctx.letterSpacing="4px";
+  // Session info — right side, vertically centred
+  const infoX = PAD + logoW + 24;
+  const infoW = W - infoX - PAD;
+  let iyp = 36;
+
+  // "SESSION REPORT" pill
+  roundRect(ctx, infoX, iyp, infoW, 22, 6);
+  ctx.fillStyle = "#1A1A1A";
+  ctx.fill();
+  ctx.strokeStyle = ACCENT+"30"; ctx.lineWidth=1; ctx.stroke();
+  ctx.font="bold 9px system-ui";
   ctx.fillStyle=ACCENT;
   ctx.textAlign="center";
-  ctx.fillText("AI SQUAT COACH  ·  PHASE 2",W/2,yp);
-  yp+=10;
+  ctx.fillText("SESSION REPORT", infoX+infoW/2, iyp+15);
+  iyp+=34;
 
-  // ── Divider ──────────────────────────────────────────────────────────────
-  ctx.strokeStyle=ACCENT+"40";
-  ctx.lineWidth=1;
-  ctx.beginPath();
-  ctx.moveTo(60,yp+14);
-  ctx.lineTo(W-60,yp+14);
-  ctx.stroke();
-  yp+=36;
+  // AI badge
+  ctx.font="bold 9px system-ui";
+  ctx.fillStyle="#555";
+  ctx.textAlign="left";
+  ctx.fillText("AI SQUAT COACH  ·  PHASE 2", infoX, iyp);
+  iyp+=22;
 
-  // ── SESSION REPORT header ────────────────────────────────────────────────
-  ctx.font="11px system-ui";
-  ctx.fillStyle="#555555";
-  ctx.textAlign="center";
-  ctx.fillText("SESSION REPORT",W/2,yp);
-  yp+=26;
-
-  // ── User name ────────────────────────────────────────────────────────────
+  // Name
   if(screenName){
-    ctx.font="bold 22px system-ui";
+    ctx.font="bold 26px system-ui";
     ctx.fillStyle="#F0F0F0";
-    ctx.textAlign="center";
-    ctx.fillText(screenName,W/2,yp);
-    yp+=30;
+    ctx.textAlign="left";
+    // Clip long names to infoW
+    ctx.save();
+    ctx.rect(infoX, iyp-26, infoW, 34);
+    ctx.clip();
+    ctx.fillText(screenName, infoX, iyp);
+    ctx.restore();
+    iyp+=34;
   }
 
   // Date
   const dateStr=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
   ctx.font="13px system-ui";
   ctx.fillStyle="#555";
-  ctx.textAlign="center";
-  ctx.fillText(dateStr,W/2,yp);
-  yp+=36;
+  ctx.textAlign="left";
+  ctx.fillText(dateStr, infoX, iyp);
+  iyp+=22;
+
+  // Site
+  ctx.font="bold 12px system-ui";
+  ctx.fillStyle=ACCENT;
+  ctx.fillText(`🌐 ${SITE}`, infoX, iyp);
+
+  let yp = ROW1_H + 30;
+
+  // ── Full-width accent divider ────────────────────────────────────────────
+  const grad=ctx.createLinearGradient(0,0,W,0);
+  grad.addColorStop(0,ACCENT+"00");
+  grad.addColorStop(0.3,ACCENT+"88");
+  grad.addColorStop(0.7,ACCENT+"88");
+  grad.addColorStop(1,ACCENT+"00");
+  ctx.fillStyle=grad;
+  ctx.fillRect(0,yp,W,2);
+  yp+=18;
 
   // ── Score hero box ───────────────────────────────────────────────────────
   const bx=60,bw=W-120,bh=170;
@@ -303,87 +324,93 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
   yp+=28;
 
   // ── Invite section ────────────────────────────────────────────────────────
-  // Invite card bg
-  const invH=180;
-  roundRect(ctx,60,yp,W-120,invH,12);
-  const invGrad=ctx.createLinearGradient(60,yp,W-60,yp+invH);
+  const invH=200;
+  roundRect(ctx,40,yp,W-80,invH,14);
+  const invGrad=ctx.createLinearGradient(40,yp,W-40,yp+invH);
   invGrad.addColorStop(0,"#0A1A0F");
   invGrad.addColorStop(1,"#080808");
   ctx.fillStyle=invGrad;
   ctx.fill();
-  ctx.strokeStyle=ACCENT+"30";
-  ctx.lineWidth=1;
+  ctx.strokeStyle=ACCENT+"40";
+  ctx.lineWidth=1.5;
   ctx.stroke();
 
-  // Squat stick figure (small)
-  const fx=W-130, fy=yp+30;
-  ctx.strokeStyle=ACCENT+"60";
-  ctx.lineWidth=2;
-  ctx.lineCap="round";
-  // head
-  ctx.beginPath();ctx.arc(fx,fy,9,0,Math.PI*2);ctx.fillStyle=ACCENT+"40";ctx.fill();ctx.stroke();
-  // torso
-  ctx.beginPath();ctx.moveTo(fx,fy+9);ctx.lineTo(fx-3,fy+34);ctx.stroke();
-  // arms
-  ctx.beginPath();ctx.moveTo(fx-1,fy+18);ctx.lineTo(fx-18,fy+24);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(fx-1,fy+18);ctx.lineTo(fx+16,fy+24);ctx.stroke();
-  // thighs
-  ctx.beginPath();ctx.moveTo(fx-3,fy+34);ctx.lineTo(fx-16,fy+52);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(fx-3,fy+34);ctx.lineTo(fx+10,fy+52);ctx.stroke();
-  // shins
-  ctx.beginPath();ctx.moveTo(fx-16,fy+52);ctx.lineTo(fx-20,fy+70);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(fx+10,fy+52);ctx.lineTo(fx+14,fy+70);ctx.stroke();
+  // logo512 image on the right side of invite card
+  const il=60, ilx=W-40-il-16, ily=yp+(invH-il)/2;
+  if(logo512Img){
+    // Clip to rounded square
+    ctx.save();
+    roundRect(ctx,ilx,ily,il,il,10);
+    ctx.clip();
+    try{ctx.drawImage(logo512Img,ilx,ily,il,il);}catch{}
+    ctx.restore();
+    // subtle border
+    ctx.strokeStyle=ACCENT+"30"; ctx.lineWidth=1;
+    roundRect(ctx,ilx,ily,il,il,10); ctx.stroke();
+  }
 
-  const invX=80;
+  const invX=60;
+  const invTextW = W-80-il-32; // text area avoids the logo
   ctx.textAlign="left";
-  ctx.font="bold 11px system-ui";
-  ctx.fillStyle=ACCENT;
-  ctx.fillText("YOUR FRIEND JUST CRUSHED THEIR SQUATS 🏋️",invX,yp+28);
 
-  ctx.font="bold 18px system-ui";
+  ctx.font="bold 10px system-ui";
+  ctx.fillStyle=ACCENT;
+  ctx.fillText("🏋️  YOUR FRIEND JUST CRUSHED THEIR SQUATS",invX,yp+26);
+
+  ctx.font="bold 20px system-ui";
   ctx.fillStyle="#F0F0F0";
   const name=screenName||"They";
-  ctx.fillText(`${name} scored ${finalScore}/100`,invX,yp+58);
-
-  ctx.font="14px system-ui";
-  ctx.fillStyle="#888888";
-  const line1=`Grade ${grade(finalScore)} · ${gLabel(finalScore)} · ${totalSets} sets · ${totalSets*REPS} reps`;
-  ctx.fillText(line1,invX,yp+82);
+  // truncate if needed
+  let scoreText=`${name} scored ${finalScore}/100`;
+  ctx.save();
+  ctx.rect(invX,yp+30,invTextW,30);
+  ctx.clip();
+  ctx.fillText(scoreText,invX,yp+56);
+  ctx.restore();
 
   ctx.font="13px system-ui";
-  ctx.fillStyle="#666666";
-  ctx.fillText("FormIQ uses AI + live camera pose tracking to analyse",invX,yp+108);
-  ctx.fillText("your squat form in real time and coach you after every set.",invX,yp+126);
+  ctx.fillStyle="#888888";
+  const line1=`Grade ${grade(finalScore)} · ${gLabel(finalScore)} · ${totalSets} sets · ${totalSets*REPS} reps`;
+  ctx.fillText(line1,invX,yp+78);
 
-  // CTA button shape
-  roundRect(ctx,invX,yp+140,180,30,8);
+  ctx.font="12px system-ui";
+  ctx.fillStyle="#666666";
+  ctx.fillText("FormIQ uses AI + live camera pose tracking to analyse",invX,yp+104);
+  ctx.fillText("your squat form in real time and coach you after every set.",invX,yp+120);
+
+  ctx.font="11px system-ui";
+  ctx.fillStyle=ACCENT+"AA";
+  ctx.fillText(`Try it free at ${SITE}`,invX,yp+140);
+
+  // CTA button
+  roundRect(ctx,invX,yp+152,190,34,8);
   ctx.fillStyle=ACCENT;
   ctx.fill();
   ctx.font="bold 12px system-ui";
   ctx.fillStyle="#000000";
   ctx.textAlign="center";
-  ctx.fillText("TRY FORMIQ FREE →",invX+90,yp+160);
+  ctx.fillText("TRY FORMIQ FREE →",invX+95,yp+174);
   ctx.textAlign="left";
 
-  yp+=invH+24;
+  yp+=invH+20;
 
   // ── Footer ────────────────────────────────────────────────────────────────
   ctx.strokeStyle="#1E1E1E";
   ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(60,yp);ctx.lineTo(W-60,yp);ctx.stroke();
-  yp+=20;
+  ctx.beginPath();ctx.moveTo(40,yp);ctx.lineTo(W-40,yp);ctx.stroke();
+  yp+=22;
 
-  ctx.font="bold 14px system-ui";
+  ctx.font="bold 13px system-ui";
   ctx.fillStyle=ACCENT;
   ctx.textAlign="center";
-  ctx.fillText(`🌐 ${SITE}`,W/2,yp);
-  yp+=20;
+  ctx.fillText(`${SITE}`,W/2,yp);
+  yp+=18;
 
   ctx.font="11px system-ui";
-  ctx.fillStyle="#333";
-  ctx.textAlign="center";
+  ctx.fillStyle="#2A2A2A";
   ctx.fillText("AI Squat Form Tracking  ·  Real-time Coaching  ·  Session Scoring",W/2,yp);
-  yp+=18;
+  yp+=16;
+  ctx.fillStyle="#222";
   ctx.fillText(`Generated ${new Date().toLocaleString()}`,W/2,yp);
 
   // Bottom accent bar
@@ -608,6 +635,7 @@ export default function FormIQ(){
   const [showNameModal,setShowNameModal]= useState(false);
   const [shareCanvas,  setShareCanvas]  = useState(null);
   const [logoImg,      setLogoImg]      = useState(null);
+  const [logo512Img,   setLogo512Img]   = useState(null);
 
   const videoRef      = useRef(null);
   const canvasRef     = useRef(null);
@@ -633,13 +661,18 @@ export default function FormIQ(){
   useEffect(()=>{totalSetsRef.current=totalSets;},[totalSets]);
   useEffect(()=>{analyzingRef.current=analyzing;},[analyzing]);
 
-  // Pre-load logo image for report
+  // Pre-load logo images for report
   useEffect(()=>{
     const img=new Image();
     img.crossOrigin="anonymous";
     img.onload=()=>setLogoImg(img);
     img.onerror=()=>setLogoImg(null);
     img.src=`${process.env.PUBLIC_URL}/formIQ.png`;
+    const img2=new Image();
+    img2.crossOrigin="anonymous";
+    img2.onload=()=>setLogo512Img(img2);
+    img2.onerror=()=>setLogo512Img(null);
+    img2.src=`${process.env.PUBLIC_URL}/logo512.png`;
   },[]);
 
   // ── Pose onResults ────────────────────────────────────────────────────────
@@ -876,7 +909,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`
       return;
     }
     const c=generateReportCanvas({screenName,finalScore:fs,history:h,
-      totalSets:ts,REPS,logoImg});
+      totalSets:ts,REPS,logoImg,logo512Img});
     setShareCanvas(c);
   };
 
@@ -886,7 +919,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`
     setShowNameModal(false);
     const c=generateReportCanvas({screenName:name,
       finalScore:finalScore??0,history:historyRef.current,
-      totalSets,REPS,logoImg});
+      totalSets,REPS,logoImg,logo512Img});
     setShareCanvas(c);
   };
 
@@ -1428,15 +1461,27 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`
     <div style={{...page,padding:"24px 20px 36px"}}>
       <div style={{maxWidth:560,margin:"0 auto"}}>
 
-        <div style={{textAlign:"center",padding:"20px 0 28px"}}>
-          <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
-            style={{height:60,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 20px",opacity:.85}}/>
-          <div style={{...lbl,marginBottom:14}}>Session Complete</div>
-          <div style={{fontSize:104,fontWeight:900,letterSpacing:-6,color:gc,lineHeight:1}}>{fs}</div>
-          <div style={{fontSize:24,color:gc,fontWeight:700,marginTop:6}}>{grade(fs)}  ·  {gLabel(fs)}</div>
-          <div style={{color:C.muted,marginTop:8,fontSize:13}}>
-            {totalSets} sets · {totalSets*REPS} reps
-            {poseCount>0&&` · ${poseCount}/${totalSets} sets live pose`}
+        {/* ── Results hero: logo LEFT · score RIGHT ── */}
+        <div style={{display:"flex",alignItems:"center",gap:20,
+          padding:"20px 0 24px",borderBottom:`1px solid ${C.border}`,marginBottom:20}}>
+          {/* Logo left */}
+          <img
+            src={`${process.env.PUBLIC_URL}/formIQ.png`}
+            alt="FormIQ"
+            style={{height:100,width:100,objectFit:"contain",flexShrink:0,
+              borderRadius:14,background:C.s2,padding:6}}
+          />
+          {/* Score right */}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{...lbl,marginBottom:6}}>Session Complete</div>
+            <div style={{fontSize:72,fontWeight:900,letterSpacing:-4,color:gc,lineHeight:1}}>{fs}</div>
+            <div style={{fontSize:18,color:gc,fontWeight:700,marginTop:4}}>
+              {grade(fs)}&nbsp;&nbsp;·&nbsp;&nbsp;{gLabel(fs)}
+            </div>
+            <div style={{color:C.muted,marginTop:6,fontSize:12}}>
+              {totalSets} sets · {totalSets*REPS} reps
+              {poseCount>0&&` · ${poseCount}/${totalSets} pose`}
+            </div>
           </div>
         </div>
 
