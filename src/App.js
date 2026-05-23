@@ -156,61 +156,58 @@ const generateReportCanvas = ({screenName,finalScore,history,totalSets,REPS,logo
   ctx.fillStyle=topGrad; ctx.fillRect(0,0,W,5);
 
   // ── HEADER: true 50/50 columns ───────────────────────────────────────────
-  // Left col: x=0..W/2, Right col: x=W/2..W
-  const COL=W/2; // 400px each
+  // formIQ.png is 2661×1024 rectangle — ratio ~2.6:1. Never box it.
+  const COL=W/2; // 400px each col
   const HDR_H=190;
   const PAD=32;
+  const LOGO_RATIO=2661/1024; // 2.599
 
-  // Left column — logo, big and clear
+  // Left col: logo fills column width at natural rectangle ratio, no box, no clip
+  const lLogoW=COL-PAD-20; // ~348px
+  const lLogoH=Math.round(lLogoW/LOGO_RATIO); // ~134px
+  const lLogoY=Math.round((HDR_H-lLogoH)/2)+2;
   if(logoImg){
-    const lSize=154; // large logo
-    const lx=PAD;
-    const ly=(HDR_H-lSize)/2+5;
-    try{ctx.drawImage(logoImg,lx,ly,lSize,lSize);}catch{}
+    try{ctx.drawImage(logoImg,PAD,lLogoY,lLogoW,lLogoH);}catch{}
   } else {
-    ctx.fillStyle="#FFFFFF"; ctx.font="bold 38px system-ui";
-    ctx.textAlign="left"; ctx.fillText("FormIQ",PAD,90);
+    ctx.fillStyle="#FFFFFF";ctx.font="bold 38px system-ui";ctx.textAlign="left";
+    ctx.fillText("FormIQ",PAD,90);
   }
 
-  // Tagline under logo
-  ctx.font="11px system-ui"; ctx.fillStyle="#AAAAAA"; ctx.textAlign="left";
-  ctx.fillText("Real-time Form Tracking  •  AI Squat Coaching  •  Session Scoring",PAD,HDR_H-14);
-
   // Vertical divider
-  ctx.strokeStyle=ACCENT+"25"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(COL,18); ctx.lineTo(COL,HDR_H-14); ctx.stroke();
+  ctx.strokeStyle=ACCENT+"25";ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(COL,18);ctx.lineTo(COL,HDR_H-14);ctx.stroke();
 
-  // Right column — session data
-  const RX=COL+PAD; // right col start x
-  const RW=W-RX-PAD; // right col usable width
+  // Right col — session data
+  const RX=COL+PAD;
+  const RW=W-RX-PAD;
   let ry=28;
 
-  // SESSION REPORT pill — full right col width
+  // SESSION REPORT pill
   roundRect(ctx,RX,ry,RW,24,6);
-  ctx.fillStyle="#1C1C1C"; ctx.fill();
-  ctx.strokeStyle=ACCENT+"40"; ctx.lineWidth=1; ctx.stroke();
-  ctx.font="bold 10px system-ui"; ctx.fillStyle=ACCENT;
-  ctx.textAlign="center"; ctx.fillText("SESSION REPORT",RX+RW/2,ry+16);
+  ctx.fillStyle="#1C1C1C";ctx.fill();
+  ctx.strokeStyle=ACCENT+"40";ctx.lineWidth=1;ctx.stroke();
+  ctx.font="bold 10px system-ui";ctx.fillStyle=ACCENT;
+  ctx.textAlign="center";ctx.fillText("SESSION REPORT",RX+RW/2,ry+16);
   ry+=36;
 
   // AI badge
-  ctx.font="10px system-ui"; ctx.fillStyle="#BBBBBB"; ctx.textAlign="left";
-  ctx.fillText("AI SQUAT COACH  ·  PHASE 2",RX,ry); ry+=22;
+  ctx.font="10px system-ui";ctx.fillStyle="#BBBBBB";ctx.textAlign="left";
+  ctx.fillText("AI SQUAT COACH  ·  PHASE 2",RX,ry);ry+=22;
 
-  // Name — large, bold
+  // Name
   if(screenName){
-    ctx.font="bold 30px system-ui"; ctx.fillStyle="#F0F0F0"; ctx.textAlign="left";
-    ctx.save(); ctx.beginPath(); ctx.rect(RX,ry-28,RW,36); ctx.clip();
-    ctx.fillText(screenName,RX,ry); ctx.restore(); ry+=36;
+    ctx.font="bold 30px system-ui";ctx.fillStyle="#F0F0F0";ctx.textAlign="left";
+    ctx.save();ctx.beginPath();ctx.rect(RX,ry-28,RW,36);ctx.clip();
+    ctx.fillText(screenName,RX,ry);ctx.restore();ry+=36;
   }
 
   // Date
   const dateStr=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
-  ctx.font="bold 14px system-ui"; ctx.fillStyle="#CCCCCC"; ctx.textAlign="left";
-  ctx.fillText(dateStr,RX,ry); ry+=22;
+  ctx.font="bold 14px system-ui";ctx.fillStyle="#CCCCCC";ctx.textAlign="left";
+  ctx.fillText(dateStr,RX,ry);ry+=22;
 
   // Website
-  ctx.font="bold 14px system-ui"; ctx.fillStyle=ACCENT;
+  ctx.font="bold 14px system-ui";ctx.fillStyle=ACCENT;
   ctx.fillText(`🌐  ${SITE}`,RX,ry);
 
   let yp=HDR_H+10;
@@ -288,14 +285,10 @@ const generateReportCanvas = ({screenName,finalScore,history,totalSets,REPS,logo
   ctx.fillStyle=invGrad; ctx.fill();
   ctx.strokeStyle=ACCENT+"50"; ctx.lineWidth=1.5; ctx.stroke();
 
-  // logo512 — right side of invite card
-  const il=72, ilx=W-32-il-20, ily=yp+(invH-il)/2;
+  // logo512 — right side of invite card, no box, draw directly for maximum clarity
+  const il=88, ilx=W-32-il-20, ily=yp+(invH-il)/2;
   if(logo512Img){
-    ctx.save(); roundRect(ctx,ilx,ily,il,il,12); ctx.clip();
     try{ctx.drawImage(logo512Img,ilx,ily,il,il);}catch{}
-    ctx.restore();
-    ctx.strokeStyle=ACCENT+"40"; ctx.lineWidth=1;
-    roundRect(ctx,ilx,ily,il,il,12); ctx.stroke();
   }
 
   const invX=52, invTW=W-64-il-40;
@@ -320,30 +313,28 @@ const generateReportCanvas = ({screenName,finalScore,history,totalSets,REPS,logo
   ctx.textAlign="left";
   yp+=invH+20;
 
-  // ── FOOTER: true 50/50 columns ────────────────────────────────────────────
-  ctx.strokeStyle="#1E1E1E"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(32,yp); ctx.lineTo(W-32,yp); ctx.stroke(); yp+=18;
+  // ── FOOTER: 50/50 columns ─────────────────────────────────────────────────
+  ctx.strokeStyle="#1E1E1E";ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(32,yp);ctx.lineTo(W-32,yp);ctx.stroke();yp+=14;
 
-  const FTR_H=80;
-  // Left col: logo512
+  const FTR_H=86;
+  // Left col: logo512 — no box, no clip, clear at natural square ratio
   if(logo512Img){
-    const fs2=52, fx2=PAD, fy2=yp+(FTR_H-fs2)/2;
-    ctx.save(); roundRect(ctx,fx2,fy2,fs2,fs2,10); ctx.clip();
-    try{ctx.drawImage(logo512Img,fx2,fy2,fs2,fs2);}catch{}
-    ctx.restore();
-    ctx.strokeStyle=ACCENT+"30"; ctx.lineWidth=1;
-    roundRect(ctx,fx2,fy2,fs2,fs2,10); ctx.stroke();
+    const fls=68; // 68×68 — logo512 is square (512×512)
+    const flx=PAD;
+    const fly=yp+(FTR_H-fls)/2;
+    try{ctx.drawImage(logo512Img,flx,fly,fls,fls);}catch{}
   }
 
-  // Right col: site name + tagline + timestamp
-  const FRX=COL+PAD; // right col x for footer
-  let fry=yp+18;
-  ctx.font="bold 15px system-ui"; ctx.fillStyle=ACCENT; ctx.textAlign="left";
-  ctx.fillText(SITE,FRX,fry); fry+=20;
-  ctx.font="11px system-ui"; ctx.fillStyle="#888888";
-  ctx.fillText("AI Squat Form Tracking  ·  Real-time Coaching  ·  Session Scoring",FRX,fry); fry+=17;
-  ctx.fillStyle="#555555";
-  ctx.fillText(`Generated ${new Date().toLocaleString()}`,FRX,fry);
+  // Right col: site + tagline + timestamp — all right-aligned to W-PAD
+  const FRX=COL+PAD;
+  let fry=yp+20;
+  ctx.font="bold 16px system-ui";ctx.fillStyle=ACCENT;ctx.textAlign="right";
+  ctx.fillText(SITE,W-PAD,fry);fry+=22;
+  ctx.font="11px system-ui";ctx.fillStyle="#888888";ctx.textAlign="right";
+  ctx.fillText("Real-time Form Tracking  ·  AI Squat Coaching  ·  Session Scoring",W-PAD,fry);fry+=18;
+  ctx.fillStyle="#555555";ctx.textAlign="right";
+  ctx.fillText(`Generated ${new Date().toLocaleString()}`,W-PAD,fry);
 
   // Bottom accent bar
   const botGrad=ctx.createLinearGradient(0,H-5,W,H-5);
@@ -1106,15 +1097,22 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     <div style={{...page,padding:"24px 20px 36px"}}>
       <div style={{maxWidth:560,margin:"0 auto"}}>
 
-        {/* Results hero: logo LEFT · score RIGHT */}
-        <div style={{display:"flex",alignItems:"center",gap:18,padding:"18px 0 22px",borderBottom:`1px solid ${C.border}`,marginBottom:20}}>
+        {/* Results hero: logo LEFT (no box, rectangle ratio) · score RIGHT */}
+        <div style={{display:"flex",alignItems:"center",gap:20,padding:"18px 0 22px",
+          borderBottom:`1px solid ${C.border}`,marginBottom:20}}>
+          {/* Logo — no box, no bg, natural 2661:1024 rectangle ratio */}
           <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
-            style={{height:96,width:96,objectFit:"contain",flexShrink:0,borderRadius:12,background:C.s2,padding:6}}/>
+            style={{
+              width:"auto", height:62,
+              objectFit:"contain", flexShrink:0,
+              display:"block",
+            }}/>
+          {/* Score — right side, takes remaining space */}
           <div style={{flex:1,minWidth:0}}>
             <div style={{...lbl,marginBottom:6}}>Session Complete</div>
             <div style={{fontSize:68,fontWeight:900,letterSpacing:-4,color:gc,lineHeight:1}}>{fs}</div>
             <div style={{fontSize:17,color:gc,fontWeight:700,marginTop:4}}>{grade(fs)}&nbsp;&nbsp;·&nbsp;&nbsp;{gLabel(fs)}</div>
-            <div style={{color:C.mutedLight,marginTop:6,fontSize:12}}>
+            <div style={{color:C.mutedLight,marginTop:5,fontSize:12}}>
               {totalSets} sets · {totalSets*REPS} reps{poseCount>0&&` · ${poseCount}/${totalSets} pose`}
             </div>
           </div>
