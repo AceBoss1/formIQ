@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/formIQ/static/css/main.38fb95ce.css",
-    "main.js": "/formIQ/static/js/main.0755727a.js",
+    "main.js": "/formIQ/static/js/main.631f8fd8.js",
     "index.html": "/formIQ/index.html",
     "main.38fb95ce.css.map": "/formIQ/static/css/main.38fb95ce.css.map",
-    "main.0755727a.js.map": "/formIQ/static/js/main.0755727a.js.map"
+    "main.631f8fd8.js.map": "/formIQ/static/js/main.631f8fd8.js.map"
   },
   "entrypoints": [
     "static/css/main.38fb95ce.css",
-    "static/js/main.0755727a.js"
+    "static/js/main.631f8fd8.js"
   ]
 }
