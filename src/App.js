@@ -240,13 +240,13 @@ const generateReportCanvas = ({ screenName, finalScore, history, totalSets, REPS
 
   let yp = ROW1_H + 30;
 
-  // ── Full-width accent divider ────────────────────────────────────────────
-  const grad=ctx.createLinearGradient(0,0,W,0);
-  grad.addColorStop(0,ACCENT+"00");
-  grad.addColorStop(0.3,ACCENT+"88");
-  grad.addColorStop(0.7,ACCENT+"88");
-  grad.addColorStop(1,ACCENT+"00");
-  ctx.fillStyle=grad;
+// ── Full-width accent divider ────────────────────────────────────────────
+  const divGrad=ctx.createLinearGradient(0,0,W,0);
+  divGrad.addColorStop(0,ACCENT+"00");
+  divGrad.addColorStop(0.3,ACCENT+"88");
+  divGrad.addColorStop(0.7,ACCENT+"88");
+  divGrad.addColorStop(1,ACCENT+"00");
+  ctx.fillStyle=divGrad;
   ctx.fillRect(0,yp,W,2);
   yp+=18;
 
