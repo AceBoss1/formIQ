@@ -125,6 +125,20 @@ const loadScript = (src) => new Promise((res,rej) => {
 const BONES=[[11,12],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],[27,29],[28,30],[29,31],[30,32],[11,13],[13,15],[12,14],[14,16]];
 const KEY_POINTS=[11,12,23,24,25,26,27,28];
 
+// ── Session History helpers ───────────────────────────────────────────────
+const LS_KEY = "fiq_sessions";
+const loadSessions = () => {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)||"[]"); } catch { return []; }
+};
+const saveSession = (entry) => {
+  try {
+    const prev = loadSessions();
+    prev.unshift(entry); // newest first
+    localStorage.setItem(LS_KEY, JSON.stringify(prev.slice(0,50))); // cap 50
+  } catch {}
+};
+const clearSessions = () => { try { localStorage.removeItem(LS_KEY); } catch {} };
+
 // ── roundRect helper ──────────────────────────────────────────────────────
 function roundRect(ctx,x,y,w,h,r){
   ctx.beginPath();
@@ -344,6 +358,119 @@ const generateReportCanvas = ({screenName,finalScore,history,totalSets,REPS,logo
   return canvas;
 };
 
+// ── History Modal ─────────────────────────────────────────────────────────
+function HistoryModal({sessions,onClose,onClear}){
+  const mc2=(v)=>v>=80?"#00E676":v>=60?"#FFB300":"#FF3D3D";
+  const grade2=(s)=>s>=90?"S":s>=82?"A+":s>=75?"A":s>=65?"B":s>=55?"C":"D";
+  const fmt=(iso)=>{
+    const d=new Date(iso);
+    return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})+" · "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
+  };
+  const METRICS_LABELS={kneeAlignment:"Knee",spineNeutrality:"Spine",squatDepth:"Depth",tempoConsistency:"Tempo",hipHinge:"Hip"};
+  const [expanded,setExpanded]=useState(null);
+
+  const best=sessions.length?Math.max(...sessions.map(s=>s.score)):0;
+  const avgScore=sessions.length?Math.round(sessions.reduce((s,e)=>s+e.score,0)/sessions.length):0;
+  const trend=sessions.length>=2?sessions[0].score-sessions[sessions.length-1].score:0;
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000000E8",zIndex:9999,display:"flex",flexDirection:"column"}}>
+      <div style={{background:"#111",borderBottom:"1px solid #222",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div>
+          <div style={{fontSize:16,fontWeight:700,color:"#F0F0F0"}}>Session History</div>
+          <div style={{fontSize:12,color:"#777",marginTop:2}}>{sessions.length} session{sessions.length!==1?"s":""} recorded</div>
+        </div>
+        <button onClick={onClose} style={{background:"#1A1A1A",border:"1px solid #333",color:"#CCC",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✕ Close</button>
+      </div>
+
+      {/* Summary stats */}
+      {sessions.length>=2&&(
+        <div style={{background:"#0D0D0D",padding:"12px 20px",borderBottom:"1px solid #1A1A1A",display:"flex",gap:0,flexShrink:0}}>
+          {[
+            {label:"Sessions",val:sessions.length},
+            {label:"Best Score",val:best,col:mc2(best)},
+            {label:"Average",val:avgScore,col:mc2(avgScore)},
+            {label:"Trend",val:(trend>0?"+":"")+trend,col:trend>0?"#00E676":trend<0?"#FF3D3D":"#777"},
+          ].map(({label,val,col})=>(
+            <div key={label} style={{flex:1,textAlign:"center",padding:"4px 0",borderRight:"1px solid #1A1A1A"}}>
+              <div style={{fontSize:10,color:"#555",letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{label}</div>
+              <div style={{fontSize:20,fontWeight:800,color:col||"#F0F0F0"}}>{val}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Session list */}
+      <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
+        {sessions.map((s,i)=>(
+          <div key={s.id} style={{background:expanded===i?"#141414":"#111",border:`1px solid ${expanded===i?"#272727":"#1A1A1A"}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+            {/* Row */}
+            <div onClick={()=>setExpanded(expanded===i?null:i)}
+              style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer"}}>
+              <div style={{width:42,height:42,borderRadius:8,background:mc2(s.score)+"18",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <span style={{fontSize:16,fontWeight:900,color:mc2(s.score)}}>{s.score}</span>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                  <span style={{fontSize:13,fontWeight:700,color:"#F0F0F0"}}>{grade2(s.score)} · {s.score}/100</span>
+                  {i===0&&<span style={{fontSize:9,background:"#00E67618",color:"#00E676",padding:"1px 6px",borderRadius:4,fontWeight:700}}>LATEST</span>}
+                  {s.score===best&&sessions.length>1&&<span style={{fontSize:9,background:"#FFB30018",color:"#FFB300",padding:"1px 6px",borderRadius:4,fontWeight:700}}>BEST</span>}
+                </div>
+                <div style={{fontSize:11,color:"#666"}}>{fmt(s.date)}</div>
+                <div style={{fontSize:11,color:"#555",marginTop:2}}>{s.totalSets} sets · {s.totalReps} reps · {s.camMode==="single"?"Single cam":"Quad sim"}{s.usedPose?" · Pose":"" }</div>
+              </div>
+              <div style={{color:"#444",fontSize:14}}>{expanded===i?"▲":"▼"}</div>
+            </div>
+
+            {/* Expanded metrics */}
+            {expanded===i&&s.avgMetrics&&(
+              <div style={{padding:"0 14px 14px",borderTop:"1px solid #1A1A1A"}}>
+                <div style={{fontSize:10,color:"#555",letterSpacing:2,textTransform:"uppercase",margin:"10px 0 8px"}}>Metric Averages</div>
+                {Object.entries(METRICS_LABELS).map(([key,label])=>{
+                  const v=s.avgMetrics[key]||0;
+                  return(
+                    <div key={key} style={{marginBottom:8}}>
+                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                        <span style={{fontSize:12,color:"#AAAAAA"}}>{label}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:mc2(v)}}>{v}/100</span>
+                      </div>
+                      <div style={{height:3,background:"#1E1E1E",borderRadius:2,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:`${v}%`,background:mc2(v),borderRadius:2}}/>
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Set breakdown */}
+                {s.sets&&(
+                  <>
+                    <div style={{fontSize:10,color:"#555",letterSpacing:2,textTransform:"uppercase",margin:"12px 0 8px"}}>Set Scores</div>
+                    <div style={{display:"flex",gap:8}}>
+                      {s.sets.map(set=>(
+                        <div key={set.setNumber} style={{flex:1,background:"#0D0D0D",borderRadius:6,padding:"8px",textAlign:"center"}}>
+                          <div style={{fontSize:9,color:"#555",marginBottom:3}}>S{set.setNumber}</div>
+                          <div style={{fontSize:18,fontWeight:800,color:mc2(set.score)}}>{set.score}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Clear button */}
+      <div style={{padding:"12px 16px",borderTop:"1px solid #1A1A1A",flexShrink:0,background:"#0D0D0D"}}>
+        <button onClick={()=>{if(window.confirm("Clear all session history? This cannot be undone."))onClear();}}
+          style={{width:"100%",padding:"12px",background:"transparent",color:"#555",border:"1px solid #222",borderRadius:8,cursor:"pointer",fontSize:13}}>
+          🗑 Clear All History
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── ScreenName Modal ──────────────────────────────────────────────────────
 function ScreenNameModal({value,onSave}){
   const [n,setN]=useState(value||"");
@@ -485,6 +612,12 @@ export default function FormIQ(){
   const [shareCanvas,setShareCanvas]    = useState(null);
   const [logoImg,setLogoImg]       = useState(null);
   const [logo512Img,setLogo512Img] = useState(null);
+  // ── Calibration & History ────────────────────────────────────────────────
+  const [calibrated,setCalibrated]     = useState(false);
+  const [calStep,setCalStep]           = useState(0); // 0..3 steps
+  const [poseDetected,setPoseDetected] = useState(false);
+  const [sessionLog,setSessionLog]     = useState(()=>loadSessions());
+  const [showHistory,setShowHistory]   = useState(false);
 
   const videoRef=useRef(null), canvasRef=useRef(null), streamRef=useRef(null);
   const poseRef=useRef(null), animFrameRef=useRef(null), historyRef=useRef([]);
@@ -512,6 +645,7 @@ export default function FormIQ(){
     const W=videoRef.current.videoWidth||640, H=videoRef.current.videoHeight||480;
     canvas.width=W; canvas.height=H; ctx.clearRect(0,0,W,H);
     if(!results.poseLandmarks)return;
+    setPoseDetected(true); // signal to calibration screen
     const lm=results.poseLandmarks;
     const vis=(i)=>(lm[i]?.visibility||0)>0.32;
     const px=(i)=>({x:lm[i].x*W,y:lm[i].y*H});
@@ -658,7 +792,25 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
   const nextSet=()=>{
     if(curSet>=totalSets){
       const h=historyRef.current;
-      setFinalScore(h.length?Math.round(h.reduce((s,e)=>s+e.score,0)/h.length):0);
+      const avg=h.length?Math.round(h.reduce((s,e)=>s+e.score,0)/h.length):0;
+      setFinalScore(avg);
+      // Save to persistent session history
+      const sessionEntry={
+        id:Date.now(),
+        date:new Date().toISOString(),
+        score:avg,
+        totalSets,
+        totalReps:totalSets*10,
+        camMode,
+        usedPose:h.some(s=>s.usedPose),
+        sets:h.map(s=>({setNumber:s.setNumber,score:s.score,usedPose:s.usedPose})),
+        avgMetrics:METRICS_DEF.reduce((acc,{key})=>({
+          ...acc,
+          [key]:h.length?Math.round(h.reduce((sum,e)=>sum+e.metrics[key],0)/h.length):0
+        }),{}),
+      };
+      saveSession(sessionEntry);
+      setSessionLog(loadSessions());
       setScreen("results");
     } else {
       const n=curSet+1;setCurSet(n);curSetRef.current=n;
@@ -685,7 +837,9 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     setMetrics(null);setFeedback("");setFinalScore(null);setAnalyzing(false);analyzingRef.current=false;
     setResting(false);setRestT(0);setTotalSets(3);totalSetsRef.current=3;
     setCamError("");setCamReady(false);setPoseStatus("idle");poseRef.current=null;
-    setFormAlerts([]);setLiveAngles(null);repDataRef.current=[];repStateRef.current="up";currentRepRef.current=null;setShareCanvas(null);
+    setFormAlerts([]);setLiveAngles(null);repDataRef.current=[];repStateRef.current="up";
+    currentRepRef.current=null;setShareCanvas(null);
+    setCalibrated(false);setCalStep(0);setPoseDetected(false);
   };
 
   const tapRep=()=>{
@@ -792,14 +946,30 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
         </div>
 
         <div className="fu fu5">
-          <button onClick={()=>camMode&&setScreen("workout")} style={{
+          <button onClick={()=>{
+            if(!camMode)return;
+            if(camMode==="single"){setScreen("calibrate");}
+            else{setScreen("workout");}
+          }} style={{
             width:"100%",padding:"18px",fontSize:15,fontWeight:800,
             background:camMode?C.accent:C.s3,color:camMode?"#000":C.muted,
             border:"none",borderRadius:10,cursor:camMode?"pointer":"default",
             letterSpacing:2.5,textTransform:"uppercase",transition:"all .25s"}}>
-            {!camMode?"Select a camera mode to start":camMode==="single"?"Open Camera & Begin →":"Preview Simulation →"}
+            {!camMode?"Select a camera mode to start":camMode==="single"?"Calibrate & Begin →":"Preview Simulation →"}
           </button>
         </div>
+
+        {/* Session history button */}
+        {sessionLog.length>0&&(
+          <div style={{marginTop:14,textAlign:"center"}}>
+            <button onClick={()=>setShowHistory(true)} style={{
+              background:"transparent",border:`1px solid ${C.border}`,
+              color:C.mutedLight,borderRadius:8,padding:"8px 18px",
+              cursor:"pointer",fontSize:12,fontWeight:600}}>
+              📈 Session History ({sessionLog.length} session{sessionLog.length!==1?"s":""})
+            </button>
+          </div>
+        )}
 
         <div style={{display:"flex",gap:6,marginTop:16,flexWrap:"wrap",justifyContent:"center"}}>
           {["Live pose","Auto rep count","AI coaching","Form alerts","Shareable report"].map(f=>(
@@ -808,8 +978,189 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
         </div>
       </div>
       {showNameModal&&<ScreenNameModal value={screenName} onSave={onNameSave}/>}
+      {showHistory&&<HistoryModal sessions={sessionLog} onClose={()=>setShowHistory(false)}
+        onClear={()=>{clearSessions();setSessionLog([]);setShowHistory(false);}}/>}
     </div>
   );
+
+  // ════════════════════════════════════════════════════════════
+  // CALIBRATION
+  // ════════════════════════════════════════════════════════════
+  if(screen==="calibrate"){
+    const CAL_STEPS=[
+      {
+        icon:"📐",
+        title:"Position your camera",
+        body:"Place your phone or webcam to the side — your full body from head to feet must be visible. Ideal distance: 6–8 feet from the camera.",
+        visual:(
+          <div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:24,padding:"12px 0"}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:32,marginBottom:4}}>📱</div>
+              <div style={{fontSize:10,color:C.mutedLight,letterSpacing:1}}>CAMERA</div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+              <div style={{height:2,width:80,background:`repeating-linear-gradient(90deg,${C.accent} 0,${C.accent} 6px,transparent 6px,transparent 12px)`}}/>
+              <div style={{fontSize:11,color:C.mutedLight}}>6–8 ft</div>
+            </div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:32,marginBottom:4}}>🏋️</div>
+              <div style={{fontSize:10,color:C.mutedLight,letterSpacing:1}}>YOU</div>
+            </div>
+          </div>
+        ),
+      },
+      {
+        icon:"↔️",
+        title:"Stand side-on to the camera",
+        body:"Face left or right — not toward the camera. Your left or right side should face the lens so MediaPipe can track your knee, hip, and spine angles accurately.",
+        visual:(
+          <div style={{display:"flex",justifyContent:"center",gap:32,padding:"12px 0"}}>
+            {[{label:"✅ CORRECT",sub:"Side view",ok:true},{label:"❌ WRONG",sub:"Facing camera",ok:false}].map(({label,sub,ok})=>(
+              <div key={label} style={{textAlign:"center"}}>
+                <div style={{
+                  width:60,height:80,borderRadius:8,marginBottom:6,
+                  background:ok?C.accent+"18":C.danger+"18",
+                  border:`1.5px solid ${ok?C.accent:C.danger}`,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:28,
+                }}>
+                  {ok?"🚶":"🧍"}
+                </div>
+                <div style={{fontSize:10,fontWeight:700,color:ok?C.accent:C.danger}}>{label}</div>
+                <div style={{fontSize:10,color:C.mutedLight}}>{sub}</div>
+              </div>
+            ))}
+          </div>
+        ),
+      },
+      {
+        icon:"💡",
+        title:"Lighting & background",
+        body:"Good lighting helps the AI track you accurately. Stand against a plain background if possible and avoid bright lights directly behind you.",
+        visual:(
+          <div style={{display:"flex",justifyContent:"center",gap:20,padding:"12px 0"}}>
+            {[{e:"☀️",l:"Natural light",ok:true},{e:"🌑",l:"Dark room",ok:false},{e:"🔦",l:"Backlight",ok:false}].map(({e,l,ok})=>(
+              <div key={l} style={{textAlign:"center"}}>
+                <div style={{fontSize:28,marginBottom:4}}>{e}</div>
+                <div style={{fontSize:10,color:ok?C.accent:C.danger,fontWeight:600}}>{ok?"✓":"✗"}</div>
+                <div style={{fontSize:10,color:C.mutedLight}}>{l}</div>
+              </div>
+            ))}
+          </div>
+        ),
+      },
+      {
+        icon:"🤖",
+        title:"Confirm pose tracking",
+        body:poseDetected
+          ?"✅ Pose tracking is active — your skeleton is visible. You're ready to squat!"
+          :"Stand in frame now. The AI is loading and will detect your pose automatically. Wait for the green confirmation.",
+        visual:(
+          <div style={{position:"relative",borderRadius:10,overflow:"hidden",background:"#000",height:160}}>
+            <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+            <canvas ref={canvasRef} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}/>
+            <div style={{
+              position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",
+              background:poseDetected?"#00E67622":"#00000088",
+              border:`1.5px solid ${poseDetected?C.accent:C.border}`,
+              borderRadius:8,padding:"5px 14px",whiteSpace:"nowrap",
+              display:"flex",alignItems:"center",gap:7,
+            }}>
+              {poseDetected
+                ?<><div style={{width:7,height:7,borderRadius:"50%",background:C.accent}}/><span style={{fontSize:11,color:C.accent,fontWeight:700,letterSpacing:1}}>POSE DETECTED</span></>
+                :<span style={{fontSize:11,color:C.mutedLight,letterSpacing:1}} className="pu">SCANNING...</span>
+              }
+            </div>
+          </div>
+        ),
+      },
+    ];
+
+    const step=CAL_STEPS[calStep];
+    const isLast=calStep===CAL_STEPS.length-1;
+    const canProceed=!isLast||(isLast&&poseDetected);
+
+    // Start camera + pose on step 3
+    if(calStep===3&&!camReady){
+      startCamera(facingMode);
+      loadPose();
+    }
+
+    return(
+      <div style={{...page,padding:"24px 20px 32px"}}>
+        <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}.pu{animation:pulse 1.8s ease-in-out infinite}`}</style>
+        <div style={{maxWidth:500,margin:"0 auto"}}>
+
+          {/* Header */}
+          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
+            <button onClick={()=>{stopCamera();setCalStep(0);setPoseDetected(false);setScreen("setup");}}
+              style={{background:C.s2,border:`1px solid ${C.border}`,color:C.text,borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13}}>
+              ← Back
+            </button>
+            <div style={{flex:1}}>
+              <div style={{...lbl,marginBottom:4}}>Camera Setup · Step {calStep+1} of {CAL_STEPS.length}</div>
+              <div style={{height:3,background:C.s2,borderRadius:2,overflow:"hidden"}}>
+                <div style={{height:"100%",width:`${((calStep+1)/CAL_STEPS.length)*100}%`,background:C.accent,borderRadius:2,transition:"width .4s ease"}}/>
+              </div>
+            </div>
+          </div>
+
+          {/* Step dots */}
+          <div style={{display:"flex",gap:8,marginBottom:24,justifyContent:"center"}}>
+            {CAL_STEPS.map((_,i)=>(
+              <div key={i} style={{width:i===calStep?24:8,height:8,borderRadius:4,background:i<=calStep?C.accent:C.s2,transition:"all .3s ease"}}/>
+            ))}
+          </div>
+
+          {/* Step card */}
+          <div style={{...card(false),marginBottom:18}}>
+            <div style={{fontSize:32,textAlign:"center",marginBottom:10}}>{step.icon}</div>
+            <div style={{fontSize:18,fontWeight:700,color:C.text,textAlign:"center",marginBottom:10}}>{step.title}</div>
+            <div style={{fontSize:13,color:C.mutedLight,lineHeight:1.7,textAlign:"center",marginBottom:16}}>{step.body}</div>
+            {step.visual&&(
+              <div style={{background:C.s2,borderRadius:8,padding:12,marginTop:8}}>{step.visual}</div>
+            )}
+          </div>
+
+          {/* Skip pose check note on step 3 */}
+          {isLast&&!poseDetected&&(
+            <div style={{...card(false),marginBottom:14,background:C.warn+"12",border:`1px solid ${C.warn}30`}}>
+              <div style={{fontSize:12,color:C.warn,lineHeight:1.6}}>
+                ⚠️ Pose not detected yet. You can still continue — tap counting works as fallback. For best results, make sure you're visible in frame.
+              </div>
+            </div>
+          )}
+
+          {/* Nav buttons */}
+          <div style={{display:"flex",gap:10}}>
+            {calStep>0&&(
+              <button onClick={()=>setCalStep(c=>c-1)} style={{
+                flex:1,padding:"15px",background:C.s2,color:C.text,
+                border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",
+                fontWeight:700,fontSize:14,letterSpacing:1}}>
+                ← Previous
+              </button>
+            )}
+            <button
+              onClick={()=>{
+                if(isLast){setCalibrated(true);setScreen("workout");}
+                else setCalStep(c=>c+1);
+              }}
+              style={{
+                flex:2,padding:"15px",
+                background:canProceed?C.accent:C.s3,
+                color:canProceed?"#000":C.muted,
+                border:"none",borderRadius:10,cursor:"pointer",
+                fontWeight:800,fontSize:14,letterSpacing:2,textTransform:"uppercase",
+                transition:"all .2s",
+              }}>
+              {isLast?(poseDetected?"Start Session →":"Skip & Start →"):"Next →"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // ════════════════════════════════════════════════════════════
   // WORKOUT
