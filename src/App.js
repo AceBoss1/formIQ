@@ -1,4 +1,9 @@
 import { useState, useEffect, useRef } from "react";
+import TrainerDashboard from "./TrainerDashboard";
+
+export default function FormIQ(){
+
+  const [view, setView] = useState("coach");
 
 const C = {
   bg:"#080808", surface:"#111111", s2:"#1A1A1A", s3:"#222222",
@@ -372,6 +377,10 @@ function HistoryModal({sessions,onClose,onClear}){
   const best=sessions.length?Math.max(...sessions.map(s=>s.score)):0;
   const avgScore=sessions.length?Math.round(sessions.reduce((s,e)=>s+e.score,0)/sessions.length):0;
   const trend=sessions.length>=2?sessions[0].score-sessions[sessions.length-1].score:0;
+
+if (view === "dashboard") {
+  return <TrainerDashboard onBack={() => setView("coach")} />;
+}
 
   return(
     <div style={{position:"fixed",inset:0,background:"#000000E8",zIndex:9999,display:"flex",flexDirection:"column"}}>
@@ -876,11 +885,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
         <div className="fu fu1" style={{textAlign:"center",marginBottom:36}}>
           <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
             style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
-          <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:C.accent,
-            textTransform:"uppercase",fontWeight:600,background:C.accent+"15",
-            padding:"4px 14px",borderRadius:20,border:`1px solid ${C.accent}30`}}>
-            AI Squat Coach · Phase 2
-          </div>
+
           <div style={{color:C.mutedLight,marginTop:12,fontSize:14}}>
             Live pose tracking · AI coaching · Real-time form scoring
           </div>
