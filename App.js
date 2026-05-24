@@ -5,8 +5,6 @@ export default function FormIQ(){
 
   const [view, setView] = useState("coach");
 
-
-
 const C = {
   bg:"#080808", surface:"#111111", s2:"#1A1A1A", s3:"#222222",
   border:"#272727", accent:"#00E676", warn:"#FFB300", danger:"#FF3D3D",
@@ -380,11 +378,55 @@ function HistoryModal({sessions,onClose,onClear}){
   const avgScore=sessions.length?Math.round(sessions.reduce((s,e)=>s+e.score,0)/sessions.length):0;
   const trend=sessions.length>=2?sessions[0].score-sessions[sessions.length-1].score:0;
 
-if (view === "dashboard") {
-  return <TrainerDashboard onBack={() => setView("coach")} />;
-}
+  return(
 
-return (
+<div
+  style={{
+    position: "fixed",
+    top: 16,
+    right: 16,
+    zIndex: 9999,
+    display: "flex",
+    gap: 10,
+  }}
+>
+  <button
+    onClick={() => setView("coach")}
+    style={{
+      padding: "10px 16px",
+      borderRadius: 10,
+      border: "1px solid rgba(0,230,118,0.25)",
+      background: view === "coach"
+        ? "#00E676"
+        : "rgba(0,230,118,0.08)",
+      color: view === "coach" ? "#000" : "#00E676",
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: "pointer",
+    }}
+  >
+    AI Squat Coach
+  </button>
+
+  <button
+    onClick={() => setView("dashboard")}
+    style={{
+      padding: "10px 16px",
+      borderRadius: 10,
+      border: "1px solid rgba(255,179,0,0.25)",
+      background: view === "dashboard"
+        ? "#FFB300"
+        : "rgba(255,179,0,0.08)",
+      color: view === "dashboard" ? "#000" : "#FFB300",
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: "pointer",
+    }}
+  >
+    Training Dashboard
+  </button>
+</div>
+
     <div style={{position:"fixed",inset:0,background:"#000000E8",zIndex:9999,display:"flex",flexDirection:"column"}}>
       <div style={{background:"#111",borderBottom:"1px solid #222",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
         <div>
@@ -887,6 +929,26 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
         <div className="fu fu1" style={{textAlign:"center",marginBottom:36}}>
           <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
             style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
+
+<button
+  onClick={() => setView("dashboard")}
+  style={{
+    display: "inline-block",
+    fontSize: 10,
+    letterSpacing: 2,
+    color: "#00E676",
+    textTransform: "uppercase",
+    fontWeight: 700,
+    background: "rgba(0,230,118,0.08)",
+    padding: "6px 14px",F
+    borderRadius: 20,
+    border: "1px solid rgba(0,230,118,0.25)",
+    cursor: "pointer",
+    outline: "none",
+  }}
+>
+  AI Squat Coach · Dashboard
+</button>
 
           <div style={{color:C.mutedLight,marginTop:12,fontSize:14}}>
             Live pose tracking · AI coaching · Real-time form scoring
