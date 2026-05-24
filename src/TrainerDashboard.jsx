@@ -25,10 +25,10 @@ const T = {
 const CLIENTS = [
   { id:1,  name:"Marcus Williams",   avatar:"MW", plan:"Elite",   score:84, trend:+6,  sessions:28, streak:7,  lastSeen:"Today",        status:"active",   goal:"Powerlifting",   nextSession:"Today 6PM",    progress:84 },
   { id:2,  name:"Aisha Johnson",     avatar:"AJ", plan:"Pro",     score:71, trend:+3,  sessions:14, streak:4,  lastSeen:"Yesterday",    status:"active",   goal:"Athletic perf",  nextSession:"Wed 8AM",      progress:71 },
-  { id:3,  name:"David Chen",        avatar:"DC", plan:"Starter", score:62, trend:-2,  sessions:9,  streak:0,  lastSeen:"3 days ago",   status:"at-risk",  goal:"Weight loss",    nextSession:"Thu 7PM",      progress:62 },
+  { id:3,  name:"Emmanuela Obi",        avatar:"DC", plan:"Starter", score:62, trend:-2,  sessions:9,  streak:0,  lastSeen:"3 days ago",   status:"at-risk",  goal:"BodyFitness",    nextSession:"Thu 7PM",      progress:62 },
   { id:4,  name:"Sofia Reyes",       avatar:"SR", plan:"Elite",   score:91, trend:+9,  sessions:41, streak:14, lastSeen:"Today",        status:"active",   goal:"Competition",    nextSession:"Tomorrow 5AM", progress:91 },
   { id:5,  name:"James Okafor",      avatar:"JO", plan:"Pro",     score:77, trend:+1,  sessions:22, streak:5,  lastSeen:"Yesterday",    status:"active",   goal:"Strength",       nextSession:"Fri 6PM",      progress:77 },
-  { id:6,  name:"Priya Nair",        avatar:"PN", plan:"Starter", score:55, trend:-8,  sessions:5,  streak:0,  lastSeen:"1 week ago",   status:"inactive", goal:"Fitness",        nextSession:"—",            progress:55 },
+  { id:6,  name:"Ogbodo Charity",        avatar:"PN", plan:"Starter", score:55, trend:-8,  sessions:5,  streak:0,  lastSeen:"1 week ago",   status:"inactive", goal:"Fitness",        nextSession:"—",            progress:55 },
   { id:7,  name:"Tom Brennan",       avatar:"TB", plan:"Elite",   score:88, trend:+4,  sessions:35, streak:10, lastSeen:"Today",        status:"active",   goal:"Powerlifting",   nextSession:"Today 7PM",    progress:88 },
   { id:8,  name:"Yemi Adeyemi",      avatar:"YA", plan:"Pro",     score:68, trend:+2,  sessions:18, streak:3,  lastSeen:"2 days ago",   status:"active",   goal:"Athletic perf",  nextSession:"Sat 9AM",      progress:68 },
 ];
@@ -46,7 +46,7 @@ const SCHEDULE = [
   { id:1, time:"6:00 AM", client:"Sofia Reyes",    type:"Squat Form",    duration:"45 min", status:"done",    color:T.accent },
   { id:2, time:"9:00 AM", client:"Aisha Johnson",  type:"Assessment",    duration:"30 min", status:"done",    color:T.blue },
   { id:3, time:"12:00 PM",client:"James Okafor",   type:"Squat Form",    duration:"45 min", status:"done",    color:T.accent },
-  { id:4, time:"5:00 PM", client:"David Chen",     type:"Check-in",      duration:"20 min", status:"upcoming",color:T.gold },
+  { id:4, time:"5:00 PM", client:"Emmanuela Obi",     type:"Check-in",      duration:"20 min", status:"upcoming",color:T.gold },
   { id:5, time:"6:00 PM", client:"Marcus Williams",type:"Squat Form",    duration:"45 min", status:"upcoming",color:T.accent },
   { id:6, time:"7:00 PM", client:"Tom Brennan",    type:"Squat Form",    duration:"45 min", status:"upcoming",color:T.accent },
 ];
