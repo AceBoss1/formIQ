@@ -1,5 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import TrainerDashboard from "./TrainerDashboard";
 
 const C = {
   bg:"#080808", surface:"#111111", s2:"#1A1A1A", s3:"#222222",
@@ -584,7 +583,7 @@ function ShareModal({canvas,onClose}){
 // ══════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════
-function FormIQ({ onBack }){
+function FormIQ({ onBack, clientCtx }){
   const [screen,setScreen]         = useState("setup");
   const [camMode,setCamMode]       = useState(null);
   const [totalSets,setTotalSets]   = useState(3);
@@ -874,26 +873,34 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
         .pu{animation:pulse 1.8s ease-in-out infinite}
       `}</style>
       <div style={{maxWidth:560,margin:"0 auto"}}>
-        <div className="fu fu1" style={{textAlign:"center",marginBottom:36}}>
-          {/* Back to home */}
-          <button onClick={onBack} style={{
-            display:"inline-flex",alignItems:"center",gap:6,
-            background:"transparent",border:`1px solid ${C.border}`,
-            color:C.mutedLight,borderRadius:8,padding:"6px 14px",
-            cursor:"pointer",fontSize:12,fontWeight:600,marginBottom:16,
-            fontFamily:"system-ui",
-          }}>← Home</button>
-          <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
-            style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
-          <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:C.accent,
-            textTransform:"uppercase",fontWeight:600,background:C.accent+"15",
-            padding:"4px 14px",borderRadius:20,border:`1px solid ${C.accent}30`}}>
-            AI Squat Coach
+
+        {/* ── CO-BRANDED HERO (invited client) ── */}
+        {clientCtx ? (
+          <div className="fu fu1" style={{marginBottom:28}}>
+            <CoachBrandedBanner ctx={clientCtx} fullHeader/>
           </div>
-          <div style={{color:C.mutedLight,marginTop:12,fontSize:14}}>
-            Live pose tracking · AI coaching · Real-time form scoring
+        ) : (
+          /* ── NORMAL HERO ── */
+          <div className="fu fu1" style={{textAlign:"center",marginBottom:36}}>
+            <button onClick={onBack} style={{
+              display:"inline-flex",alignItems:"center",gap:6,
+              background:"transparent",border:`1px solid ${C.border}`,
+              color:C.mutedLight,borderRadius:8,padding:"6px 14px",
+              cursor:"pointer",fontSize:12,fontWeight:600,marginBottom:16,
+              fontFamily:"system-ui",
+            }}>← Home</button>
+            <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
+              style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
+            <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:C.accent,
+              textTransform:"uppercase",fontWeight:600,background:C.accent+"15",
+              padding:"4px 14px",borderRadius:20,border:`1px solid ${C.accent}30`}}>
+              AI Squat Coach
+            </div>
+            <div style={{color:C.mutedLight,marginTop:12,fontSize:14}}>
+              Live pose tracking · AI coaching · Real-time form scoring
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="fu fu2" style={{marginBottom:18}}>
           <div style={{...lbl,marginBottom:10}}>Camera Setup</div>
@@ -1229,6 +1236,8 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     return(
       <div style={{...page}}>
         <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}.pu{animation:pulse 1.8s ease-in-out infinite}`}</style>
+        {/* Co-branded slim banner for invited clients */}
+        {clientCtx&&<CoachBrandedBanner ctx={clientCtx}/>}
         {camMode==="single"&&(
           <div style={{position:"relative",background:"#000",width:"100%"}}>
             <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",maxHeight:340,objectFit:"cover",display:"block"}}/>
@@ -1561,6 +1570,10 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
   );
 }
 
+// ── Lazy-load TrainerDashboard ─────────────────────────────────────────────
+// We import it dynamically so the squat app doesn't load trainer code upfront
+import TrainerDashboard from "./TrainerDashboard";
+import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash, getClientContext, saveClientContext } from "./CoachBranded";
 
 // ── Home screen ───────────────────────────────────────────────────────────
 function Home({ onSelect }) {
@@ -1675,8 +1688,55 @@ function Home({ onSelect }) {
 
 // ── Router (default export) ───────────────────────────────────────────────
 export default function App() {
-  const [view, setView] = useState("home"); // "home" | "squat" | "trainer"
-  if (view === "squat")   return <FormIQ onBack={()=>setView("home")}/>;
+  const [view, setView]         = useState("loading");
+  const [inviteCtx, setInviteCtx] = useState(null);
+
+  useEffect(()=>{
+    // 1. Check URL for invite hash: #/c/TRAINERSLUG/TOKEN
+    const parsed = parseInviteHash(window.location.hash);
+    if (parsed) {
+      setView("invite");
+      return;
+    }
+    // 2. Check if this device already accepted an invite (returning client)
+    const saved = getClientContext();
+    if (saved) {
+      setInviteCtx(saved);
+      setView("squat"); // returning invited client goes straight to squat coach
+      return;
+    }
+    // 3. Normal home
+    setView("home");
+  },[]);
+
+  if (view === "loading") return (
+    <div style={{background:"#080808",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:60,width:"auto",opacity:.6}}/>
+    </div>
+  );
+
+  if (view === "invite") {
+    const parsed = parseInviteHash(window.location.hash);
+    return (
+      <ClientInviteLanding
+        trainerSlug={parsed.trainerSlug}
+        token={parsed.token}
+        onAccept={(ctx)=>{
+          setInviteCtx(ctx);
+          // Clear hash so refreshing doesn't re-show landing
+          window.history.replaceState(null,"",window.location.pathname);
+          setView("squat");
+        }}
+      />
+    );
+  }
+
+  // Invited client: squat coach with no back button (this is their whole app)
+  if (view === "squat" && inviteCtx) {
+    return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
+  }
+
+  if (view === "squat")   return <FormIQ onBack={()=>setView("home")} clientCtx={null}/>;
   if (view === "trainer") return <TrainerDashboard onBack={()=>setView("home")}/>;
   return <Home onSelect={setView}/>;
 }

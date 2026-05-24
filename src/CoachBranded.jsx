@@ -27,7 +27,7 @@ export const PLANS = {
 
 // Approximate FX multipliers (in production: fetch live rates)
 const FX = { USD:1, GBP:0.79, EUR:0.92, CAD:1.36, AUD:1.53, NGN:1580, GHS:12.5, KES:128, ZAR:18.4, UGX:3740, TZS:2640, EGP:48.7 };
-const formatPrice = (usd, currency) => {
+export const formatPrice = (usd, currency) => {
   const rate = FX[currency]||1;
   const sym  = CURRENCIES[currency]?.symbol||"$";
   const amount = Math.round(usd * rate);
@@ -240,36 +240,109 @@ export function ClientInviteLanding({ trainerSlug, token, onAccept }) {
 // ═══════════════════════════════════════════════════════════════
 // CO-BRANDED HEADER — shown inside squat app when client is invited
 // ═══════════════════════════════════════════════════════════════
-export function CoachBrandedBanner({ ctx }) {
+export function CoachBrandedBanner({ ctx, fullHeader }) {
   const [trainer, setTrainer] = useState(null);
   useEffect(()=>{
     if (ctx?.trainerSlug) {
       const p = getTrainerProfile(ctx.trainerSlug);
-      setTrainer(p || { name:ctx.trainerName||"Your Coach", photo:`${process.env.PUBLIC_URL}/photoadams.jpg`, accent:"#00E676" });
+      setTrainer(p || {
+        name:    ctx.trainerName||"Your Coach",
+        photo:   `${process.env.PUBLIC_URL}/photoadams.jpg`,
+        accent:  "#00E676",
+        tagline: "Personal Strength Coach",
+      });
     }
   },[ctx]);
 
   if (!trainer||!ctx) return null;
   const accent = trainer.accent||"#00E676";
 
+  // ── Full header variant (setup screen) ───────────────────────
+  if (fullHeader) return (
+    <div style={{
+      background:"#080808", borderRadius:14,
+      border:`1px solid ${accent}30`, overflow:"hidden",
+    }}>
+      {/* Top: powered by strip */}
+      <div style={{
+        background:`${accent}10`, borderBottom:`1px solid ${accent}20`,
+        padding:"6px 16px", display:"flex", alignItems:"center",
+        justifyContent:"space-between",
+      }}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
+            style={{height:16,width:"auto",objectFit:"contain",opacity:.7}}/>
+          <span style={{fontSize:9,color:"#555",letterSpacing:2,textTransform:"uppercase"}}>
+            Powered by FormIQ
+          </span>
+        </div>
+        <span style={{fontSize:9,color:accent,letterSpacing:1.5,textTransform:"uppercase",fontWeight:700}}>
+          AI Squat Coach
+        </span>
+      </div>
+
+      {/* Main coach card */}
+      <div style={{padding:"20px",textAlign:"center"}}>
+        {/* Photo */}
+        <div style={{position:"relative",display:"inline-block",marginBottom:12}}>
+          <img src={trainer.photo} alt={trainer.name}
+            onError={e=>{e.target.style.display="none";}}
+            style={{
+              width:80, height:80, borderRadius:"50%",
+              objectFit:"cover", objectPosition:"center top",
+              border:`3px solid ${accent}`, display:"block",
+            }}/>
+          <div style={{
+            position:"absolute", bottom:2, right:2,
+            width:18, height:18, borderRadius:"50%",
+            background:accent, border:"2px solid #080808",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:9,
+          }}>✓</div>
+        </div>
+        <div style={{fontSize:11,color:"#666",letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>
+          Your Coach
+        </div>
+        <div style={{fontSize:20,fontWeight:800,color:"#F0F0F0",marginBottom:3}}>{trainer.name}</div>
+        <div style={{fontSize:12,color:"#777",marginBottom:14}}>{trainer.tagline}</div>
+
+        {/* Client name badge */}
+        <div style={{
+          display:"inline-flex", alignItems:"center", gap:6,
+          background:`${accent}15`, border:`1px solid ${accent}30`,
+          borderRadius:20, padding:"5px 14px", marginBottom:14,
+        }}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:accent}}/>
+          <span style={{fontSize:12,color:accent,fontWeight:700}}>{ctx.clientName}</span>
+          <span style={{fontSize:11,color:"#555"}}>· sessions sync to your coach</span>
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Slim banner variant (workout screen top bar) ──────────────
   return (
     <div style={{
-      background:"#0A0A0A",borderBottom:"1px solid #1A1A1A",
-      padding:"8px 16px",display:"flex",alignItems:"center",
-      gap:10,justifyContent:"space-between",
+      background:"#0A0A0A", borderBottom:"1px solid #1A1A1A",
+      padding:"8px 16px", display:"flex", alignItems:"center",
+      gap:10, justifyContent:"space-between",
     }}>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <img src={trainer.photo} alt={trainer.name}
           onError={e=>{e.target.style.display="none";}}
           style={{width:28,height:28,borderRadius:"50%",objectFit:"cover",objectPosition:"center top",border:`1.5px solid ${accent}`}}/>
         <div>
-          <div style={{fontSize:10,color:"#555",letterSpacing:1.5,textTransform:"uppercase"}}>Coached by</div>
+          <div style={{fontSize:9,color:"#555",letterSpacing:1.5,textTransform:"uppercase"}}>Coached by</div>
           <div style={{fontSize:12,fontWeight:700,color:accent,lineHeight:1}}>{trainer.name}</div>
         </div>
       </div>
-      <div style={{fontSize:10,color:"#444",textAlign:"right"}}>
-        <div style={{color:"#F0F0F0",fontWeight:600}}>{ctx.clientName}</div>
-        <div>Session will sync to your coach</div>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
+          style={{height:14,width:"auto",objectFit:"contain",opacity:.4}}/>
+        <div style={{textAlign:"right"}}>
+          <div style={{fontSize:11,color:"#F0F0F0",fontWeight:600}}>{ctx.clientName}</div>
+          <div style={{fontSize:9,color:"#444"}}>Session syncing to coach</div>
+        </div>
       </div>
     </div>
   );

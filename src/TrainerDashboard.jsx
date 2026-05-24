@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { InviteManager, PaymentModal, CURRENCIES, PLANS, saveTrainerProfile, getTrainerProfile, formatPrice } from "./CoachBranded";
 
 // ── Design tokens ──────────────────────────────────────────────────────────
 const T = {
@@ -264,12 +265,40 @@ function ClientDrawer({ client, onClose }) {
 export default function TrainerDashboard({ onBack }) {
   const [tab, setTab]             = useState("overview");
   const [selectedClient, setSelectedClient] = useState(null);
+  const [inviteClient, setInviteClient]     = useState(null);
+  const [showPayment, setShowPayment]       = useState(false);
+  const [paymentPlan, setPaymentPlan]       = useState("pro");
   const [searchQ, setSearchQ]     = useState("");
   const [filterStatus, setFilterStatus] = useState("all");
   const [notifOpen, setNotifOpen] = useState(false);
   const [mounted, setMounted]     = useState(false);
-  const trainerName = "Coach Adams";
-  const trainerInitials = "CA";
+
+  // Settings state — loaded from localStorage
+  const SLUG = "adams";
+  const [profile, setProfile] = useState(()=> getTrainerProfile(SLUG) || {
+    name:     "Coach Adams",
+    slug:     SLUG,
+    photo:    `${process.env.PUBLIC_URL}/photoadams.jpg`,
+    tagline:  "Strength & Conditioning Coach",
+    welcome:  "Hey! I've invited you to track your squats with FormIQ. After each session I'll review your form and leave you coaching notes. Let's get those numbers up! 💪",
+    accent:   "#00E676",
+    currency: "NGN",
+    plan:     "pro",
+    email:    "adams@formiqapp.space",
+  });
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+
+  const saveProfile = () => {
+    saveTrainerProfile(SLUG, profile);
+    setProfileDirty(false);
+    setProfileSaved(true);
+    setTimeout(()=>setProfileSaved(false), 2500);
+  };
+
+  const baseUrl = window.location.origin + window.location.pathname;
+  const trainerName = profile.name;
+  const trainerInitials = profile.name.split(" ").map(n=>n[0]).join("").slice(0,2);
 
   useEffect(() => { setTimeout(() => setMounted(true), 50); }, []);
 
@@ -299,6 +328,7 @@ export default function TrainerDashboard({ onBack }) {
     { id:"sessions",  icon:"◉",  label:"Sessions"  },
     { id:"schedule",  icon:"◷",  label:"Schedule"  },
     { id:"analytics", icon:"◬",  label:"Analytics" },
+    { id:"settings",  icon:"◎",  label:"Settings"  },
   ];
 
   return (
@@ -621,6 +651,14 @@ export default function TrainerDashboard({ onBack }) {
                       <div style={{ marginTop:12, fontSize:11, color:T.muted, display:"flex", alignItems:"center", gap:5 }}>
                         <span>📅</span> Next: {c.nextSession}
                       </div>
+                      <button
+                        onClick={e=>{e.stopPropagation();setInviteClient(c);}}
+                        style={{ marginTop:10, width:"100%", padding:"8px",
+                          background:T.accentDim, border:`1px solid ${T.accent}40`,
+                          borderRadius:7, color:T.accent, fontSize:12, fontWeight:700,
+                          cursor:"pointer", fontFamily:font }}>
+                        🔗 Send Invite Link
+                      </button>
                     </div>
                   );
                 })}
@@ -820,8 +858,187 @@ export default function TrainerDashboard({ onBack }) {
         </div>
       </div>
 
+          {/* ── TAB: SETTINGS ──────────────────────────────────────── */}
+          {tab==="settings"&&(
+            <div style={{ padding:"24px 28px" }}>
+              <div style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:14 }}>
+
+                {/* ── Profile editor ── */}
+                <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                  <div style={{ ...card(false) }}>
+                    <div style={{ ...lbl, marginBottom:18 }}>Trainer Profile</div>
+
+                    {/* Photo preview */}
+                    <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20 }}>
+                      <img src={profile.photo} alt={profile.name}
+                        onError={e=>{e.target.style.display="none";}}
+                        style={{ width:72, height:72, borderRadius:"50%", objectFit:"cover",
+                          objectPosition:"center top", border:`3px solid ${profile.accent||T.accent}` }}/>
+                      <div>
+                        <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{profile.name}</div>
+                        <div style={{ fontSize:12, color:T.muted, marginTop:2 }}>{profile.tagline}</div>
+                        <div style={{ fontSize:11, color:T.accent, marginTop:4 }}>
+                          {PLANS[profile.plan]?.name||"Pro"} Plan · {CURRENCIES[profile.currency]?.flag} {profile.currency}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Fields */}
+                    {[
+                      { label:"Display Name",    key:"name",    type:"text",  ph:"Coach Adams" },
+                      { label:"Photo URL",       key:"photo",   type:"text",  ph:"https://... or /photoadams.jpg" },
+                      { label:"Tagline",         key:"tagline", type:"text",  ph:"Strength & Conditioning Coach" },
+                      { label:"Email",           key:"email",   type:"email", ph:"you@email.com" },
+                    ].map(({label:fl,key,type,ph})=>(
+                      <div key={key} style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:10, color:T.muted, letterSpacing:1.5, textTransform:"uppercase", marginBottom:6 }}>{fl}</div>
+                        <input value={profile[key]||""} type={type} placeholder={ph}
+                          onChange={e=>{setProfile(p=>({...p,[key]:e.target.value}));setProfileDirty(true);}}
+                          style={{ width:"100%", padding:"10px 12px", background:T.s2,
+                            border:`1px solid ${T.border}`, borderRadius:7, color:T.text,
+                            fontSize:13, fontFamily:font, boxSizing:"border-box" }}/>
+                      </div>
+                    ))}
+
+                    {/* Welcome message */}
+                    <div style={{ marginBottom:14 }}>
+                      <div style={{ fontSize:10, color:T.muted, letterSpacing:1.5, textTransform:"uppercase", marginBottom:6 }}>Client Welcome Message</div>
+                      <textarea value={profile.welcome||""} rows={3}
+                        onChange={e=>{setProfile(p=>({...p,welcome:e.target.value}));setProfileDirty(true);}}
+                        placeholder="Message clients see when they open their invite..."
+                        style={{ width:"100%", padding:"10px 12px", background:T.s2,
+                          border:`1px solid ${T.border}`, borderRadius:7, color:T.text,
+                          fontSize:13, fontFamily:font, resize:"vertical", boxSizing:"border-box" }}/>
+                    </div>
+
+                    {/* Accent colour */}
+                    <div style={{ marginBottom:20 }}>
+                      <div style={{ fontSize:10, color:T.muted, letterSpacing:1.5, textTransform:"uppercase", marginBottom:8 }}>Brand Colour</div>
+                      <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                        {["#00E676","#3D8EF0","#F5A623","#9B6DFF","#FF4757","#FF6B6B","#00CEC9","#FDCB6E"].map(col=>(
+                          <div key={col} onClick={()=>{setProfile(p=>({...p,accent:col}));setProfileDirty(true);}}
+                            style={{ width:28, height:28, borderRadius:"50%", background:col, cursor:"pointer",
+                              border:`3px solid ${profile.accent===col?"#fff":"transparent"}`,
+                              boxShadow:profile.accent===col?`0 0 0 1px ${col}`:"none",
+                              transition:"all .15s" }}/>
+                        ))}
+                      </div>
+                    </div>
+
+                    <button onClick={saveProfile} style={{
+                      width:"100%", padding:"12px", fontWeight:700, fontSize:14,
+                      background:profileSaved?T.accentDim:(profileDirty?T.accent:T.s2),
+                      color:profileSaved?T.accent:(profileDirty?"#000":T.muted),
+                      border:`1px solid ${profileSaved?T.accent:T.border}`,
+                      borderRadius:8, cursor:"pointer", fontFamily:font, transition:"all .2s",
+                    }}>
+                      {profileSaved?"✓ Profile Saved!":profileDirty?"Save Changes":"No Changes"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── Right col: Plan + Currency ── */}
+                <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+
+                  {/* Base currency */}
+                  <div style={{ ...card(false) }}>
+                    <div style={{ ...lbl, marginBottom:14 }}>Base Currency</div>
+                    <div style={{ fontSize:12, color:T.muted, marginBottom:14, lineHeight:1.6 }}>
+                      Sets the currency for your subscription and client invoices.<br/>
+                      African currencies use <strong style={{color:"#00C3FF"}}>Paystack</strong>. All others use <strong style={{color:"#635BFF"}}>Stripe</strong>.
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, maxHeight:300, overflowY:"auto" }}>
+                      {Object.entries(CURRENCIES).map(([code,{name,flag,gateway}])=>(
+                        <div key={code} onClick={()=>{setProfile(p=>({...p,currency:code}));setProfileDirty(true);}}
+                          style={{
+                            padding:"8px 10px", borderRadius:8, cursor:"pointer",
+                            background:profile.currency===code?T.s3:T.s2,
+                            border:`1px solid ${profile.currency===code?T.accent:T.border}`,
+                            transition:"all .15s",
+                          }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:2 }}>
+                            <span style={{ fontSize:14 }}>{flag}</span>
+                            <span style={{ fontSize:12, fontWeight:700, color:profile.currency===code?T.accent:T.text }}>{code}</span>
+                            <span style={{ fontSize:9, color:gateway==="paystack"?"#00C3FF":"#635BFF",
+                              background:gateway==="paystack"?"#00C3FF18":"#635BFF18",
+                              padding:"1px 5px", borderRadius:3, fontWeight:700, marginLeft:"auto" }}>
+                              {gateway==="paystack"?"PS":"ST"}
+                            </span>
+                          </div>
+                          <div style={{ fontSize:10, color:T.muted }}>{name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Subscription plan */}
+                  <div style={{ ...card(false) }}>
+                    <div style={{ ...lbl, marginBottom:14 }}>Subscription Plan</div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                      {Object.entries(PLANS).map(([key,plan])=>{
+                        const isActive = profile.plan===key;
+                        const price = formatPrice(plan.usd, profile.currency);
+                        return(
+                          <div key={key} style={{
+                            padding:"12px", borderRadius:9, cursor:"pointer",
+                            background:isActive?T.accentDim:T.s2,
+                            border:`1px solid ${isActive?T.accent:T.border}`,
+                            transition:"all .15s",
+                          }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:6 }}>
+                              <div style={{ fontSize:14, fontWeight:700, color:isActive?T.accent:T.text }}>{plan.name}</div>
+                              <div style={{ fontSize:16, fontWeight:900, color:isActive?T.accent:T.mutedL }}>{price}<span style={{ fontSize:10, color:T.muted }}>/mo</span></div>
+                            </div>
+                            <div style={{ fontSize:11, color:T.muted, marginBottom:isActive?0:8 }}>Up to {plan.clients===999?"unlimited":plan.clients} clients</div>
+                            {!isActive&&(
+                              <button onClick={()=>{setPaymentPlan(key);setShowPayment(true);}}
+                                style={{ width:"100%", padding:"8px", background:T.accent,
+                                  color:"#000", border:"none", borderRadius:6, fontWeight:700,
+                                  fontSize:12, cursor:"pointer", fontFamily:font, marginTop:6 }}>
+                                Upgrade to {plan.name}
+                              </button>
+                            )}
+                            {isActive&&<div style={{ fontSize:11, color:T.accent, fontWeight:700 }}>✓ Current plan</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+
       {/* Client drawer */}
       {selectedClient&&<ClientDrawer client={selectedClient} onClose={()=>setSelectedClient(null)}/>}
+
+      {/* Invite manager modal */}
+      {inviteClient&&(
+        <InviteManager
+          client={inviteClient}
+          trainerSlug={profile.slug||"adams"}
+          baseUrl={baseUrl}
+          onClose={()=>setInviteClient(null)}
+        />
+      )}
+
+      {/* Payment modal */}
+      {showPayment&&(
+        <PaymentModal
+          plan={paymentPlan}
+          currency={profile.currency||"NGN"}
+          trainerEmail={profile.email}
+          onClose={()=>setShowPayment(false)}
+          onSuccess={({plan})=>{
+            setProfile(p=>({...p,plan}));
+            saveTrainerProfile(profile.slug||"adams",{...profile,plan});
+            setShowPayment(false);
+          }}
+        />
+      )}
     </div>
   );
 }
