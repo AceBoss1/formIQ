@@ -583,7 +583,7 @@ function ShareModal({canvas,onClose}){
 // ══════════════════════════════════════════════════════════════
 // MAIN
 // ══════════════════════════════════════════════════════════════
-export default function FormIQ(){
+function FormIQ({ onBack }){
   const [screen,setScreen]         = useState("setup");
   const [camMode,setCamMode]       = useState(null);
   const [totalSets,setTotalSets]   = useState(3);
@@ -874,12 +874,20 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
       `}</style>
       <div style={{maxWidth:560,margin:"0 auto"}}>
         <div className="fu fu1" style={{textAlign:"center",marginBottom:36}}>
+          {/* Back to home */}
+          <button onClick={onBack} style={{
+            display:"inline-flex",alignItems:"center",gap:6,
+            background:"transparent",border:`1px solid ${C.border}`,
+            color:C.mutedLight,borderRadius:8,padding:"6px 14px",
+            cursor:"pointer",fontSize:12,fontWeight:600,marginBottom:16,
+            fontFamily:"system-ui",
+          }}>← Home</button>
           <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
             style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
           <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:C.accent,
             textTransform:"uppercase",fontWeight:600,background:C.accent+"15",
             padding:"4px 14px",borderRadius:20,border:`1px solid ${C.accent}30`}}>
-            AI Squat Coach · Phase 2
+            AI Squat Coach
           </div>
           <div style={{color:C.mutedLight,marginTop:12,fontSize:14}}>
             Live pose tracking · AI coaching · Real-time form scoring
@@ -1550,4 +1558,127 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
       {shareCanvas&&<ShareModal canvas={shareCanvas} onClose={()=>setShareCanvas(null)}/>}
     </div>
   );
+}
+
+// ── Lazy-load TrainerDashboard ─────────────────────────────────────────────
+// We import it dynamically so the squat app doesn't load trainer code upfront
+import TrainerDashboard from "./TrainerDashboard";
+
+// ── Home screen ───────────────────────────────────────────────────────────
+function Home({ onSelect }) {
+  const [logoImg, setLogoImg] = useState(null);
+  useEffect(()=>{
+    const img=new Image();
+    img.onload=()=>setLogoImg(img);
+    img.src=`${process.env.PUBLIC_URL}/formIQ.png`;
+  },[]);
+
+  const font="system-ui,-apple-system,'Segoe UI',sans-serif";
+  return (
+    <div style={{
+      background:"#080808", color:"#F0F0F0", minHeight:"100vh",
+      fontFamily:font, display:"flex", flexDirection:"column",
+      alignItems:"center", justifyContent:"center", padding:"32px 20px",
+    }}>
+      <style>{`
+        @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+        .h-btn:hover{transform:translateY(-2px);transition:all .2s}
+        .h-btn:active{transform:scale(.98)}
+      `}</style>
+
+      {/* Logo */}
+      <div style={{animation:"fadeUp .5s ease forwards",textAlign:"center",marginBottom:48}}>
+        <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
+          style={{height:120,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 20px"}}/>
+        <div style={{fontSize:15,color:"#777",letterSpacing:1}}>
+          Choose your destination
+        </div>
+      </div>
+
+      {/* Two buttons */}
+      <div style={{
+        display:"grid", gridTemplateColumns:"1fr 1fr", gap:16,
+        maxWidth:540, width:"100%",
+        animation:"fadeUp .5s .12s ease both",
+      }}>
+        {/* AI Squat Coach */}
+        <button className="h-btn" onClick={()=>onSelect("squat")} style={{
+          background:"#0E1204", border:"1px solid #00E67640",
+          borderRadius:16, padding:"28px 20px", cursor:"pointer",
+          textAlign:"center", display:"flex", flexDirection:"column",
+          alignItems:"center", gap:12, color:"#F0F0F0",
+          fontFamily:font, transition:"all .2s",
+        }}>
+          <div style={{
+            width:56, height:56, borderRadius:14,
+            background:"#00E67620", border:"1px solid #00E67650",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:28,
+          }}>🏋️</div>
+          <div>
+            <div style={{fontSize:16, fontWeight:800, color:"#00E676", marginBottom:6}}>
+              AI Squat Coach
+            </div>
+            <div style={{fontSize:12, color:"#777", lineHeight:1.6}}>
+              Live pose tracking<br/>Real-time form scoring<br/>AI coaching after every set
+            </div>
+          </div>
+          <div style={{
+            marginTop:4, fontSize:10, letterSpacing:2.5,
+            color:"#00E676", background:"#00E67618",
+            padding:"4px 12px", borderRadius:20, fontWeight:700,
+            border:"1px solid #00E67630",
+          }}>OPEN APP →</div>
+        </button>
+
+        {/* Trainer Dashboard */}
+        <button className="h-btn" onClick={()=>onSelect("trainer")} style={{
+          background:"#0A0C12", border:"1px solid #3D8EF040",
+          borderRadius:16, padding:"28px 20px", cursor:"pointer",
+          textAlign:"center", display:"flex", flexDirection:"column",
+          alignItems:"center", gap:12, color:"#F0F0F0",
+          fontFamily:font, transition:"all .2s",
+        }}>
+          <div style={{
+            width:56, height:56, borderRadius:14,
+            background:"#3D8EF020", border:"1px solid #3D8EF050",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:28,
+          }}>📊</div>
+          <div>
+            <div style={{fontSize:16, fontWeight:800, color:"#3D8EF0", marginBottom:6}}>
+              Trainer Dashboard
+            </div>
+            <div style={{fontSize:12, color:"#777", lineHeight:1.6}}>
+              Manage clients &amp; sessions<br/>Analytics &amp; leaderboards<br/>Schedule &amp; roster
+            </div>
+          </div>
+          <div style={{
+            marginTop:4, fontSize:10, letterSpacing:2.5,
+            color:"#3D8EF0", background:"#3D8EF018",
+            padding:"4px 12px", borderRadius:20, fontWeight:700,
+            border:"1px solid #3D8EF030",
+          }}>OPEN DASHBOARD →</div>
+        </button>
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        marginTop:48, fontSize:11, color:"#333",
+        animation:"fadeUp .5s .24s ease both",
+        textAlign:"center", lineHeight:1.8,
+      }}>
+        formiqapp.space · AI Squat Form Tracking<br/>
+        Phase 2 · Live Pose · Multi-cam coming soon
+      </div>
+    </div>
+  );
+}
+
+// ── Router (default export) ───────────────────────────────────────────────
+export default function App() {
+  const [view, setView] = useState("home"); // "home" | "squat" | "trainer"
+  if (view === "squat")   return <FormIQ onBack={()=>setView("home")}/>;
+  if (view === "trainer") return <TrainerDashboard onBack={()=>setView("home")}/>;
+  return <Home onSelect={setView}/>;
 }

@@ -261,7 +261,7 @@ function ClientDrawer({ client, onClose }) {
 // ══════════════════════════════════════════════════════════════
 // MAIN DASHBOARD
 // ══════════════════════════════════════════════════════════════
-export default function TrainerDashboard() {
+export default function TrainerDashboard({ onBack }) {
   const [tab, setTab]             = useState("overview");
   const [selectedClient, setSelectedClient] = useState(null);
   const [searchQ, setSearchQ]     = useState("");
@@ -353,6 +353,19 @@ export default function TrainerDashboard() {
               </button>
             ))}
           </nav>
+
+          {/* Back to Home */}
+          <button onClick={onBack} className="nav-btn" style={{
+            width:"100%", display:"flex", alignItems:"center", gap:10,
+            padding:"10px 12px", background:"transparent",
+            border:"none", borderRadius:8, cursor:"pointer",
+            color:T.muted, fontWeight:500, fontSize:13,
+            fontFamily:font, textAlign:"left", marginTop:8,
+            borderLeft:"2px solid transparent",
+          }}>
+            <span style={{fontSize:16}}>←</span>
+            Home
+          </button>
 
           {/* Trainer profile */}
           <div style={{ padding:"16px", borderTop:`1px solid ${T.border}` }}>
