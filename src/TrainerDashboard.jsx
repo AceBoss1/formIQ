@@ -261,7 +261,7 @@ function ClientDrawer({ client, onClose }) {
 // ══════════════════════════════════════════════════════════════
 // MAIN DASHBOARD
 // ══════════════════════════════════════════════════════════════
-export default function TrainerDashboard({ onBack }) {
+export default function TrainerDashboard() {
   const [tab, setTab]             = useState("overview");
   const [selectedClient, setSelectedClient] = useState(null);
   const [searchQ, setSearchQ]     = useState("");
@@ -385,23 +385,6 @@ export default function TrainerDashboard({ onBack }) {
               </div>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-
-<button
-  onClick={onBack}
-  style={{
-    background: T.s2,
-    border: `1px solid ${T.border}`,
-    borderRadius: 8,
-    padding: "8px 14px",
-    cursor: "pointer",
-    color: T.text,
-    fontWeight: 600,
-    fontSize: 13,
-  }}
->
-  ← Back to Coach
-</button>
-
               {/* Notification bell */}
               <div style={{ position:"relative" }}>
                 <button onClick={()=>setNotifOpen(!notifOpen)} style={{
