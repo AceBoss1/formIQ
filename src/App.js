@@ -885,11 +885,27 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
         <div className="fu fu1" style={{textAlign:"center",marginBottom:36}}>
           <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
             style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
-          <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:C.accent,
-            textTransform:"uppercase",fontWeight:600,background:C.accent+"15",
-            padding:"4px 14px",borderRadius:20,border:`1px solid ${C.accent}30`}}>
-            AI Squat Coach · Phase 2
-          </div>
+
+<button
+  onClick={() => setView("dashboard")}
+  style={{
+    display: "inline-block",
+    fontSize: 10,
+    letterSpacing: 2,
+    color: "#00E676",
+    textTransform: "uppercase",
+    fontWeight: 700,
+    background: "rgba(0,230,118,0.08)",
+    padding: "6px 14px",
+    borderRadius: 20,
+    border: "1px solid rgba(0,230,118,0.25)",
+    cursor: "pointer",
+    outline: "none",
+  }}
+>
+  AI Squat Coach · Dashboard
+</button>
+
           <div style={{color:C.mutedLight,marginTop:12,fontSize:14}}>
             Live pose tracking · AI coaching · Real-time form scoring
           </div>
