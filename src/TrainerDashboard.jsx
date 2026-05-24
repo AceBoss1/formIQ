@@ -855,8 +855,6 @@ export default function TrainerDashboard({ onBack }) {
             </div>
           )}
 
-        </div>
-      </div>
 
           {/* ── TAB: SETTINGS ──────────────────────────────────────── */}
           {tab==="settings"&&(
