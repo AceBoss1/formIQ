@@ -1,6 +1,4 @@
 import { useState, useEffect, useRef } from "react";
-import TrainerDashboard from "./TrainerDashboard";
-import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash, getClientContext, saveClientContext } from "./CoachBranded";
 
 const C = {
   bg:"#080808", surface:"#111111", s2:"#1A1A1A", s3:"#222222",
@@ -1572,6 +1570,10 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
   );
 }
 
+// ── Lazy-load TrainerDashboard ─────────────────────────────────────────────
+// We import it dynamically so the squat app doesn't load trainer code upfront
+import TrainerDashboard from "./TrainerDashboard";
+import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash, getClientContext, saveClientContext } from "./CoachBranded";
 
 // ── Home screen ───────────────────────────────────────────────────────────
 function Home({ onSelect }) {
