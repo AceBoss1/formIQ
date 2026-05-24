@@ -378,14 +378,59 @@ function HistoryModal({sessions,onClose,onClear}){
   const avgScore=sessions.length?Math.round(sessions.reduce((s,e)=>s+e.score,0)/sessions.length):0;
   const trend=sessions.length>=2?sessions[0].score-sessions[sessions.length-1].score:0;
 
-if (view === "dashboard") {
-  return <TrainerDashboard onBack={() => setView("coach")} />;
-}
-
   return(
+
+<div
+  style={{
+    position: "fixed",
+    top: 16,
+    right: 16,
+    zIndex: 9999,
+    display: "flex",
+    gap: 10,
+  }}
+>
+  <button
+    onClick={() => setView("coach")}
+    style={{
+      padding: "10px 16px",
+      borderRadius: 10,
+      border: "1px solid rgba(0,230,118,0.25)",
+      background: view === "coach"
+        ? "#00E676"
+        : "rgba(0,230,118,0.08)",
+      color: view === "coach" ? "#000" : "#00E676",
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: "pointer",
+    }}
+  >
+    AI Squat Coach
+  </button>
+
+  <button
+    onClick={() => setView("dashboard")}
+    style={{
+      padding: "10px 16px",
+      borderRadius: 10,
+      border: "1px solid rgba(255,179,0,0.25)",
+      background: view === "dashboard"
+        ? "#FFB300"
+        : "rgba(255,179,0,0.08)",
+      color: view === "dashboard" ? "#000" : "#FFB300",
+      fontWeight: 700,
+      fontSize: 12,
+      cursor: "pointer",
+    }}
+  >
+    Training Dashboard
+  </button>
+</div>
+
     <div style={{position:"fixed",inset:0,background:"#000000E8",zIndex:9999,display:"flex",flexDirection:"column"}}>
+</div>
       <div style={{background:"#111",borderBottom:"1px solid #222",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div>
+        </div>
           <div style={{fontSize:16,fontWeight:700,color:"#F0F0F0"}}>Session History</div>
           <div style={{fontSize:12,color:"#777",marginTop:2}}>{sessions.length} session{sessions.length!==1?"s":""} recorded</div>
         </div>
@@ -896,7 +941,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     textTransform: "uppercase",
     fontWeight: 700,
     background: "rgba(0,230,118,0.08)",
-    padding: "6px 14px",
+    padding: "6px 14px",F
     borderRadius: 20,
     border: "1px solid rgba(0,230,118,0.25)",
     cursor: "pointer",
