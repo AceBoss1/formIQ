@@ -73,7 +73,7 @@ const TIPS = [
   "Stability creates strength",
 ];
 
-const SITE = "formiqapp.space";
+const SITE = "formiq.name.ng";
 
 const mc     = (v) => v>=80?C.accent:v>=60?C.warn:C.danger;
 const grade  = (s) => s>=90?"S":s>=82?"A+":s>=75?"A":s>=65?"B":s>=55?"C":"D";
