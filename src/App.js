@@ -852,7 +852,17 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     ];
     const step=CAL_STEPS[calStep];
     const isLast=calStep===CAL_STEPS.length-1;
-    if(calStep===3&&!camReady){startCamera(facingMode);loadPose();}
+
+    // Start camera + pose when reaching step 3
+    useEffect(()=>{
+      if(calStep===3){
+        startCamera(facingMode);
+        loadPose();
+      }
+      return()=>{
+        if(calStep!==3) stopCamera();
+      };
+    },[calStep]); // eslint-disable-line
     return(
       <div style={{...page,padding:"24px 20px 32px"}}>
         <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}.pu{animation:pulse 1.8s ease-in-out infinite}`}</style>
