@@ -1,7 +1,11 @@
-import { useState, useEffect, useRef } from "react";
 import TrainerDashboard from "./TrainerDashboard";
-import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash, getClientContext, saveClientContext } from "./CoachBranded";
+import TrainerRegistration from "./TrainerRegistration";
+import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash } from "./CoachBranded";
+import { getClientCtx, saveClientCtx, isTrainerLoggedIn, getTrainer, saveTrainer, getSessionUsage, isSessionAllowed, incrementSession, FREE_LIMITS, sessionsRemaining } from "./db";
+import { SessionBadge, PaywallModal } from "./FreeSessionGate";
+import { useState, useEffect, useRef } from "react";
 
+// ── Palette ───────────────────────────────────────────────────
 const C = {
   bg:"#080808", surface:"#111111", s2:"#1A1A1A", s3:"#222222",
   border:"#272727", accent:"#00E676", warn:"#FFB300", danger:"#FF3D3D",
@@ -127,21 +131,6 @@ const loadScript = (src) => new Promise((res,rej) => {
 const BONES=[[11,12],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28],[27,29],[28,30],[29,31],[30,32],[11,13],[13,15],[12,14],[14,16]];
 const KEY_POINTS=[11,12,23,24,25,26,27,28];
 
-// ── Session History helpers ───────────────────────────────────────────────
-const LS_KEY = "fiq_sessions";
-const loadSessions = () => {
-  try { return JSON.parse(localStorage.getItem(LS_KEY)||"[]"); } catch { return []; }
-};
-const saveSession = (entry) => {
-  try {
-    const prev = loadSessions();
-    prev.unshift(entry); // newest first
-    localStorage.setItem(LS_KEY, JSON.stringify(prev.slice(0,50))); // cap 50
-  } catch {}
-};
-const clearSessions = () => { try { localStorage.removeItem(LS_KEY); } catch {} };
-
-// ── roundRect helper ──────────────────────────────────────────────────────
 function roundRect(ctx,x,y,w,h,r){
   ctx.beginPath();
   ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);
@@ -151,232 +140,144 @@ function roundRect(ctx,x,y,w,h,r){
   ctx.closePath();
 }
 
-// ── Report canvas ─────────────────────────────────────────────────────────
-const generateReportCanvas = ({screenName,finalScore,history,totalSets,REPS,logoImg,logo512Img}) => {
-  const W=800, H=1260;
-  const canvas=document.createElement("canvas");
-  canvas.width=W; canvas.height=H;
-  const ctx=canvas.getContext("2d");
-  const ACCENT="#00E676", WARN="#FFB300", DANGER="#FF3D3D";
-  const scoreColor=finalScore>=80?ACCENT:finalScore>=60?WARN:DANGER;
+// ── Session history ───────────────────────────────────────────
+const LS_KEY="fiq_sessions";
+const loadSessions=()=>{try{return JSON.parse(localStorage.getItem(LS_KEY)||"[]");}catch{return[];}};
+const saveSession=(entry)=>{try{const p=loadSessions();p.unshift(entry);localStorage.setItem(LS_KEY,JSON.stringify(p.slice(0,50)));}catch{}};
+const clearSessions=()=>{try{localStorage.removeItem(LS_KEY);}catch{}};
 
-  // Background
-  ctx.fillStyle="#080808"; ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle="#FFFFFF06"; ctx.lineWidth=1;
+// ── Report canvas ─────────────────────────────────────────────
+const generateReportCanvas=({screenName,finalScore,history,totalSets,REPS,logoImg,logo512Img})=>{
+  const W=800,H=1260;
+  const canvas=document.createElement("canvas");
+  canvas.width=W;canvas.height=H;
+  const ctx=canvas.getContext("2d");
+  const ACCENT="#00E676",WARN="#FFB300",DANGER="#FF3D3D";
+  const scoreColor=finalScore>=80?ACCENT:finalScore>=60?WARN:DANGER;
+  ctx.fillStyle="#080808";ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle="#FFFFFF06";ctx.lineWidth=1;
   for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
   for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
-
-  // Top accent bar
   const topGrad=ctx.createLinearGradient(0,0,W,0);
-  topGrad.addColorStop(0,ACCENT+"FF"); topGrad.addColorStop(0.6,ACCENT+"88"); topGrad.addColorStop(1,ACCENT+"00");
-  ctx.fillStyle=topGrad; ctx.fillRect(0,0,W,5);
-
-  // ── HEADER: true 50/50 columns ───────────────────────────────────────────
-  // formIQ.png is 2661×1024 rectangle — ratio ~2.6:1. Never box it.
-  const COL=W/2; // 400px each col
-  const HDR_H=190;
-  const PAD=32;
-  const LOGO_RATIO=2661/1024; // 2.599
-
-  // Left col: logo fills column width at natural rectangle ratio, no box, no clip
-  const lLogoW=COL-PAD-20; // ~348px
-  const lLogoH=Math.round(lLogoW/LOGO_RATIO); // ~134px
-  const lLogoY=Math.round((HDR_H-lLogoH)/2)+2;
-  if(logoImg){
-    try{ctx.drawImage(logoImg,PAD,lLogoY,lLogoW,lLogoH);}catch{}
-  } else {
-    ctx.fillStyle="#FFFFFF";ctx.font="bold 38px system-ui";ctx.textAlign="left";
-    ctx.fillText("FormIQ",PAD,90);
-  }
-
-  // Vertical divider
+  topGrad.addColorStop(0,ACCENT+"FF");topGrad.addColorStop(0.6,ACCENT+"88");topGrad.addColorStop(1,ACCENT+"00");
+  ctx.fillStyle=topGrad;ctx.fillRect(0,0,W,5);
+  const COL=W/2,HDR_H=190,PAD=32,LOGO_RATIO=2661/1024;
+  const lLogoW=COL-PAD-20,lLogoH=Math.round(lLogoW/LOGO_RATIO),lLogoY=Math.round((HDR_H-lLogoH)/2)+2;
+  if(logoImg){try{ctx.drawImage(logoImg,PAD,lLogoY,lLogoW,lLogoH);}catch{}}
+  else{ctx.fillStyle="#FFFFFF";ctx.font="bold 38px system-ui";ctx.textAlign="left";ctx.fillText("FormIQ",PAD,90);}
   ctx.strokeStyle=ACCENT+"25";ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(COL,18);ctx.lineTo(COL,HDR_H-14);ctx.stroke();
-
-  // Right col — session data
-  const RX=COL+PAD;
-  const RW=W-RX-PAD;
-  let ry=28;
-
-  // SESSION REPORT pill
-  roundRect(ctx,RX,ry,RW,24,6);
-  ctx.fillStyle="#1C1C1C";ctx.fill();
+  const RX=COL+PAD,RW=W-RX-PAD;let ry=28;
+  roundRect(ctx,RX,ry,RW,24,6);ctx.fillStyle="#1C1C1C";ctx.fill();
   ctx.strokeStyle=ACCENT+"40";ctx.lineWidth=1;ctx.stroke();
-  ctx.font="bold 10px system-ui";ctx.fillStyle=ACCENT;
-  ctx.textAlign="center";ctx.fillText("SESSION REPORT",RX+RW/2,ry+16);
-  ry+=36;
-
-  // AI badge
+  ctx.font="bold 10px system-ui";ctx.fillStyle=ACCENT;ctx.textAlign="center";
+  ctx.fillText("SESSION REPORT",RX+RW/2,ry+16);ry+=36;
   ctx.font="10px system-ui";ctx.fillStyle="#BBBBBB";ctx.textAlign="left";
   ctx.fillText("AI SQUAT COACH  ·  PHASE 2",RX,ry);ry+=22;
-
-  // Name
-  if(screenName){
-    ctx.font="bold 30px system-ui";ctx.fillStyle="#F0F0F0";ctx.textAlign="left";
+  if(screenName){ctx.font="bold 30px system-ui";ctx.fillStyle="#F0F0F0";ctx.textAlign="left";
     ctx.save();ctx.beginPath();ctx.rect(RX,ry-28,RW,36);ctx.clip();
-    ctx.fillText(screenName,RX,ry);ctx.restore();ry+=36;
-  }
-
-  // Date
+    ctx.fillText(screenName,RX,ry);ctx.restore();ry+=36;}
   const dateStr=new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
   ctx.font="bold 14px system-ui";ctx.fillStyle="#CCCCCC";ctx.textAlign="left";
   ctx.fillText(dateStr,RX,ry);ry+=22;
-
-  // Website
-  ctx.font="bold 14px system-ui";ctx.fillStyle=ACCENT;
-  ctx.fillText(`🌐  ${SITE}`,RX,ry);
-
+  ctx.font="bold 14px system-ui";ctx.fillStyle=ACCENT;ctx.fillText(`🌐  ${SITE}`,RX,ry);
   let yp=HDR_H+10;
-
-  // Full-width divider
   const divGrad=ctx.createLinearGradient(0,0,W,0);
-  divGrad.addColorStop(0,ACCENT+"00"); divGrad.addColorStop(0.3,ACCENT+"99");
-  divGrad.addColorStop(0.7,ACCENT+"99"); divGrad.addColorStop(1,ACCENT+"00");
-  ctx.fillStyle=divGrad; ctx.fillRect(0,yp,W,2); yp+=20;
-
-  // ── Score hero ───────────────────────────────────────────────────────────
+  divGrad.addColorStop(0,ACCENT+"00");divGrad.addColorStop(0.3,ACCENT+"99");
+  divGrad.addColorStop(0.7,ACCENT+"99");divGrad.addColorStop(1,ACCENT+"00");
+  ctx.fillStyle=divGrad;ctx.fillRect(0,yp,W,2);yp+=20;
   const bx=48,bw=W-96,bh=175;
   const glow=ctx.createRadialGradient(W/2,yp+bh/2,10,W/2,yp+bh/2,bw*0.55);
-  glow.addColorStop(0,scoreColor+"28"); glow.addColorStop(1,"transparent");
-  ctx.fillStyle=glow; ctx.fillRect(bx-20,yp-20,bw+40,bh+40);
-  roundRect(ctx,bx,yp,bw,bh,14);
-  ctx.fillStyle="#0C0C0C"; ctx.fill();
-  ctx.strokeStyle=scoreColor+"55"; ctx.lineWidth=1.5; ctx.stroke();
-  ctx.font="bold 100px system-ui"; ctx.fillStyle=scoreColor; ctx.textAlign="center";
+  glow.addColorStop(0,scoreColor+"28");glow.addColorStop(1,"transparent");
+  ctx.fillStyle=glow;ctx.fillRect(bx-20,yp-20,bw+40,bh+40);
+  roundRect(ctx,bx,yp,bw,bh,14);ctx.fillStyle="#0C0C0C";ctx.fill();
+  ctx.strokeStyle=scoreColor+"55";ctx.lineWidth=1.5;ctx.stroke();
+  ctx.font="bold 100px system-ui";ctx.fillStyle=scoreColor;ctx.textAlign="center";
   ctx.fillText(finalScore,W/2,yp+108);
-  ctx.font="bold 22px system-ui"; ctx.fillStyle=scoreColor;
+  ctx.font="bold 22px system-ui";ctx.fillStyle=scoreColor;
   ctx.fillText(`${grade(finalScore)}  ·  ${gLabel(finalScore)}`,W/2,yp+148);
-  ctx.font="bold 12px system-ui"; ctx.fillStyle="#AAAAAA";
+  ctx.font="bold 12px system-ui";ctx.fillStyle="#AAAAAA";
   ctx.fillText(`${totalSets} SETS  ·  ${totalSets*REPS} REPS`,W/2,yp+170);
   yp+=bh+26;
-
-  // ── Set breakdown ─────────────────────────────────────────────────────────
-  ctx.font="bold 11px system-ui"; ctx.fillStyle="#BBBBBB"; ctx.textAlign="left";
-  ctx.fillText("SET-BY-SET BREAKDOWN",48,yp); yp+=18;
+  ctx.font="bold 11px system-ui";ctx.fillStyle="#BBBBBB";ctx.textAlign="left";
+  ctx.fillText("SET-BY-SET BREAKDOWN",48,yp);yp+=18;
   const setW=(W-96-(history.length-1)*12)/history.length;
   history.forEach(({setNumber:sn,score:sc,usedPose:up},i)=>{
-    const sx=48+i*(setW+12);
-    const sc_col=sc>=80?ACCENT:sc>=60?WARN:DANGER;
-    roundRect(ctx,sx,yp,setW,82,10);
-    ctx.fillStyle="#141414"; ctx.fill();
-    ctx.strokeStyle=sc_col+"40"; ctx.lineWidth=1; ctx.stroke();
-    ctx.font="bold 11px system-ui"; ctx.fillStyle="#BBBBBB"; ctx.textAlign="center";
+    const sx=48+i*(setW+12),sc_col=sc>=80?ACCENT:sc>=60?WARN:DANGER;
+    roundRect(ctx,sx,yp,setW,82,10);ctx.fillStyle="#141414";ctx.fill();
+    ctx.strokeStyle=sc_col+"40";ctx.lineWidth=1;ctx.stroke();
+    ctx.font="bold 11px system-ui";ctx.fillStyle="#BBBBBB";ctx.textAlign="center";
     ctx.fillText(`S${sn}${up?" ●":""}`,sx+setW/2,yp+18);
-    ctx.font="bold 34px system-ui"; ctx.fillStyle=sc_col;
-    ctx.fillText(sc,sx+setW/2,yp+54);
-    ctx.fillStyle="#252525";
-    roundRect(ctx,sx+14,yp+64,setW-28,5,2); ctx.fill();
-    ctx.fillStyle=sc_col;
-    roundRect(ctx,sx+14,yp+64,(setW-28)*(sc/100),5,2); ctx.fill();
+    ctx.font="bold 34px system-ui";ctx.fillStyle=sc_col;ctx.fillText(sc,sx+setW/2,yp+54);
+    ctx.fillStyle="#252525";roundRect(ctx,sx+14,yp+64,setW-28,5,2);ctx.fill();
+    ctx.fillStyle=sc_col;roundRect(ctx,sx+14,yp+64,(setW-28)*(sc/100),5,2);ctx.fill();
   });
   yp+=82+22;
-
-  // ── Form breakdown ────────────────────────────────────────────────────────
-  ctx.font="bold 11px system-ui"; ctx.fillStyle="#BBBBBB"; ctx.textAlign="left";
-  ctx.fillText("FORM BREAKDOWN — SESSION AVERAGE",48,yp); yp+=18;
+  ctx.font="bold 11px system-ui";ctx.fillStyle="#BBBBBB";ctx.textAlign="left";
+  ctx.fillText("FORM BREAKDOWN — SESSION AVERAGE",48,yp);yp+=18;
   const avgM={};
-  METRICS_DEF.forEach(({key})=>{
-    avgM[key]=history.length?Math.round(history.reduce((s,e)=>s+e.metrics[key],0)/history.length):0;
-  });
+  METRICS_DEF.forEach(({key})=>{avgM[key]=history.length?Math.round(history.reduce((s,e)=>s+e.metrics[key],0)/history.length):0;});
   METRICS_DEF.forEach(({key,label:lb})=>{
-    const v=avgM[key];
-    const col=v>=80?ACCENT:v>=60?WARN:DANGER;
-    ctx.font="14px system-ui"; ctx.fillStyle="#DDDDDD"; ctx.textAlign="left"; ctx.fillText(lb,48,yp+5);
-    ctx.font="bold 14px system-ui"; ctx.fillStyle=col; ctx.textAlign="right"; ctx.fillText(`${v}/100`,W-48,yp+5);
-    ctx.fillStyle="#1E1E1E"; roundRect(ctx,48,yp+14,W-96,7,3); ctx.fill();
-    ctx.fillStyle=col; roundRect(ctx,48,yp+14,(W-96)*(v/100),7,3); ctx.fill();
+    const v=avgM[key],col=v>=80?ACCENT:v>=60?WARN:DANGER;
+    ctx.font="14px system-ui";ctx.fillStyle="#DDDDDD";ctx.textAlign="left";ctx.fillText(lb,48,yp+5);
+    ctx.font="bold 14px system-ui";ctx.fillStyle=col;ctx.textAlign="right";ctx.fillText(`${v}/100`,W-48,yp+5);
+    ctx.fillStyle="#1E1E1E";roundRect(ctx,48,yp+14,W-96,7,3);ctx.fill();
+    ctx.fillStyle=col;roundRect(ctx,48,yp+14,(W-96)*(v/100),7,3);ctx.fill();
     yp+=42;
   });
   yp+=10;
-
-  // Thin divider
-  ctx.strokeStyle="#282828"; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(48,yp); ctx.lineTo(W-48,yp); ctx.stroke(); yp+=22;
-
-  // ── Invite card ───────────────────────────────────────────────────────────
+  ctx.strokeStyle="#282828";ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(48,yp);ctx.lineTo(W-48,yp);ctx.stroke();yp+=22;
   const invH=205;
   roundRect(ctx,32,yp,W-64,invH,14);
   const invGrad=ctx.createLinearGradient(32,yp,W-32,yp+invH);
-  invGrad.addColorStop(0,"#081A10"); invGrad.addColorStop(1,"#060C07");
-  ctx.fillStyle=invGrad; ctx.fill();
-  ctx.strokeStyle=ACCENT+"50"; ctx.lineWidth=1.5; ctx.stroke();
-
-  // logo512 — right side of invite card, no box, draw directly for maximum clarity
-  const il=88, ilx=W-32-il-20, ily=yp+(invH-il)/2;
-  if(logo512Img){
-    try{ctx.drawImage(logo512Img,ilx,ily,il,il);}catch{}
-  }
-
-  const invX=52, invTW=W-64-il-40;
-  ctx.textAlign="left";
-  ctx.font="bold 11px system-ui"; ctx.fillStyle=ACCENT;
+  invGrad.addColorStop(0,"#081A10");invGrad.addColorStop(1,"#060C07");
+  ctx.fillStyle=invGrad;ctx.fill();ctx.strokeStyle=ACCENT+"50";ctx.lineWidth=1.5;ctx.stroke();
+  const il=88,ilx=W-32-il-20,ily=yp+(invH-il)/2;
+  if(logo512Img){try{ctx.drawImage(logo512Img,ilx,ily,il,il);}catch{}}
+  const invX=52,invTW=W-64-il-40;
+  ctx.textAlign="left";ctx.font="bold 11px system-ui";ctx.fillStyle=ACCENT;
   ctx.fillText("🏋️  YOUR FRIEND JUST CRUSHED THEIR SQUATS",invX,yp+28);
-  ctx.font="bold 22px system-ui"; ctx.fillStyle="#F0F0F0";
-  ctx.save(); ctx.beginPath(); ctx.rect(invX,yp+32,invTW,30); ctx.clip();
-  ctx.fillText(`${screenName||"They"} scored ${finalScore}/100`,invX,yp+58);
-  ctx.restore();
-  ctx.font="14px system-ui"; ctx.fillStyle="#CCCCCC";
+  ctx.font="bold 22px system-ui";ctx.fillStyle="#F0F0F0";
+  ctx.save();ctx.beginPath();ctx.rect(invX,yp+32,invTW,30);ctx.clip();
+  ctx.fillText(`${screenName||"They"} scored ${finalScore}/100`,invX,yp+58);ctx.restore();
+  ctx.font="14px system-ui";ctx.fillStyle="#CCCCCC";
   ctx.fillText(`Grade ${grade(finalScore)} · ${gLabel(finalScore)} · ${totalSets} sets · ${totalSets*REPS} reps`,invX,yp+82);
-  ctx.font="13px system-ui"; ctx.fillStyle="#AAAAAA";
+  ctx.font="13px system-ui";ctx.fillStyle="#AAAAAA";
   ctx.fillText("FormIQ uses AI + live camera pose tracking to analyse",invX,yp+108);
   ctx.fillText("your squat form in real time and coach you after every set.",invX,yp+126);
-  ctx.font="bold 12px system-ui"; ctx.fillStyle=ACCENT;
-  ctx.fillText(`Try it free at  ${SITE}`,invX,yp+148);
-  roundRect(ctx,invX,yp+158,200,36,8);
-  ctx.fillStyle=ACCENT; ctx.fill();
-  ctx.font="bold 13px system-ui"; ctx.fillStyle="#000000"; ctx.textAlign="center";
-  ctx.fillText("TRY FORMIQ FREE →",invX+100,yp+181);
-  ctx.textAlign="left";
+  ctx.font="bold 12px system-ui";ctx.fillStyle=ACCENT;ctx.fillText(`Try it free at  ${SITE}`,invX,yp+148);
+  roundRect(ctx,invX,yp+158,200,36,8);ctx.fillStyle=ACCENT;ctx.fill();
+  ctx.font="bold 13px system-ui";ctx.fillStyle="#000000";ctx.textAlign="center";
+  ctx.fillText("TRY FORMIQ FREE →",invX+100,yp+181);ctx.textAlign="left";
   yp+=invH+20;
-
-  // ── FOOTER: 50/50 columns ─────────────────────────────────────────────────
   ctx.strokeStyle="#1E1E1E";ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(32,yp);ctx.lineTo(W-32,yp);ctx.stroke();yp+=14;
-
   const FTR_H=86;
-  // Left col: logo512 — no box, no clip, clear at natural square ratio
-  if(logo512Img){
-    const fls=68; // 68×68 — logo512 is square (512×512)
-    const flx=PAD;
-    const fly=yp+(FTR_H-fls)/2;
-    try{ctx.drawImage(logo512Img,flx,fly,fls,fls);}catch{}
-  }
-
-  // Right col: site + tagline + timestamp — all right-aligned to W-PAD
-  const FRX=COL+PAD;
+  if(logo512Img){const fls=68,flx=PAD,fly=yp+(FTR_H-fls)/2;try{ctx.drawImage(logo512Img,flx,fly,fls,fls);}catch{}}
   let fry=yp+20;
-  ctx.font="bold 16px system-ui";ctx.fillStyle=ACCENT;ctx.textAlign="right";
-  ctx.fillText(SITE,W-PAD,fry);fry+=22;
+  ctx.font="bold 16px system-ui";ctx.fillStyle=ACCENT;ctx.textAlign="right";ctx.fillText(SITE,W-PAD,fry);fry+=22;
   ctx.font="11px system-ui";ctx.fillStyle="#888888";ctx.textAlign="right";
   ctx.fillText("Real-time Form Tracking  ·  AI Squat Coaching  ·  Session Scoring",W-PAD,fry);fry+=18;
-  ctx.fillStyle="#555555";ctx.textAlign="right";
-  ctx.fillText(`Generated ${new Date().toLocaleString()}`,W-PAD,fry);
-
-  // Bottom accent bar
+  ctx.fillStyle="#555555";ctx.fillText(`Generated ${new Date().toLocaleString()}`,W-PAD,fry);
   const botGrad=ctx.createLinearGradient(0,H-5,W,H-5);
-  botGrad.addColorStop(0,ACCENT+"00"); botGrad.addColorStop(0.5,ACCENT+"99"); botGrad.addColorStop(1,ACCENT+"00");
-  ctx.fillStyle=botGrad; ctx.fillRect(0,H-5,W,5);
-
+  botGrad.addColorStop(0,ACCENT+"00");botGrad.addColorStop(0.5,ACCENT+"99");botGrad.addColorStop(1,ACCENT+"00");
+  ctx.fillStyle=botGrad;ctx.fillRect(0,H-5,W,5);
   return canvas;
 };
 
-// ── History Modal ─────────────────────────────────────────────────────────
+// ── HistoryModal ──────────────────────────────────────────────
 function HistoryModal({sessions,onClose,onClear}){
   const mc2=(v)=>v>=80?"#00E676":v>=60?"#FFB300":"#FF3D3D";
   const grade2=(s)=>s>=90?"S":s>=82?"A+":s>=75?"A":s>=65?"B":s>=55?"C":"D";
-  const fmt=(iso)=>{
-    const d=new Date(iso);
-    return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})+" · "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
-  };
+  const fmt=(iso)=>{const d=new Date(iso);return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})+" · "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});};
   const METRICS_LABELS={kneeAlignment:"Knee",spineNeutrality:"Spine",squatDepth:"Depth",tempoConsistency:"Tempo",hipHinge:"Hip"};
   const [expanded,setExpanded]=useState(null);
-
   const best=sessions.length?Math.max(...sessions.map(s=>s.score)):0;
   const avgScore=sessions.length?Math.round(sessions.reduce((s,e)=>s+e.score,0)/sessions.length):0;
   const trend=sessions.length>=2?sessions[0].score-sessions[sessions.length-1].score:0;
-
   return(
-    <div style={{position:"fixed",inset:0,background:"#000000E8",zIndex:9999,display:"flex",flexDirection:"column"}}>
+    <div style={{position:"fixed",inset:0,background:"#000000E8",zIndex:9999,display:"flex",flexDirection:"column",fontFamily:"system-ui"}}>
       <div style={{background:"#111",borderBottom:"1px solid #222",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
         <div>
           <div style={{fontSize:16,fontWeight:700,color:"#F0F0F0"}}>Session History</div>
@@ -384,16 +285,9 @@ function HistoryModal({sessions,onClose,onClear}){
         </div>
         <button onClick={onClose} style={{background:"#1A1A1A",border:"1px solid #333",color:"#CCC",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✕ Close</button>
       </div>
-
-      {/* Summary stats */}
       {sessions.length>=2&&(
         <div style={{background:"#0D0D0D",padding:"12px 20px",borderBottom:"1px solid #1A1A1A",display:"flex",gap:0,flexShrink:0}}>
-          {[
-            {label:"Sessions",val:sessions.length},
-            {label:"Best Score",val:best,col:mc2(best)},
-            {label:"Average",val:avgScore,col:mc2(avgScore)},
-            {label:"Trend",val:(trend>0?"+":"")+trend,col:trend>0?"#00E676":trend<0?"#FF3D3D":"#777"},
-          ].map(({label,val,col})=>(
+          {[{label:"Sessions",val:sessions.length},{label:"Best Score",val:best,col:mc2(best)},{label:"Average",val:avgScore,col:mc2(avgScore)},{label:"Trend",val:(trend>0?"+":"")+trend,col:trend>0?"#00E676":trend<0?"#FF3D3D":"#777"}].map(({label,val,col})=>(
             <div key={label} style={{flex:1,textAlign:"center",padding:"4px 0",borderRight:"1px solid #1A1A1A"}}>
               <div style={{fontSize:10,color:"#555",letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{label}</div>
               <div style={{fontSize:20,fontWeight:800,color:col||"#F0F0F0"}}>{val}</div>
@@ -401,14 +295,10 @@ function HistoryModal({sessions,onClose,onClear}){
           ))}
         </div>
       )}
-
-      {/* Session list */}
       <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
         {sessions.map((s,i)=>(
           <div key={s.id} style={{background:expanded===i?"#141414":"#111",border:`1px solid ${expanded===i?"#272727":"#1A1A1A"}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
-            {/* Row */}
-            <div onClick={()=>setExpanded(expanded===i?null:i)}
-              style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer"}}>
+            <div onClick={()=>setExpanded(expanded===i?null:i)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer"}}>
               <div style={{width:42,height:42,borderRadius:8,background:mc2(s.score)+"18",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <span style={{fontSize:16,fontWeight:900,color:mc2(s.score)}}>{s.score}</span>
               </div>
@@ -419,12 +309,10 @@ function HistoryModal({sessions,onClose,onClear}){
                   {s.score===best&&sessions.length>1&&<span style={{fontSize:9,background:"#FFB30018",color:"#FFB300",padding:"1px 6px",borderRadius:4,fontWeight:700}}>BEST</span>}
                 </div>
                 <div style={{fontSize:11,color:"#666"}}>{fmt(s.date)}</div>
-                <div style={{fontSize:11,color:"#555",marginTop:2}}>{s.totalSets} sets · {s.totalReps} reps · {s.camMode==="single"?"Single cam":"Quad sim"}{s.usedPose?" · Pose":"" }</div>
+                <div style={{fontSize:11,color:"#555",marginTop:2}}>{s.totalSets} sets · {s.totalReps} reps · {s.camMode==="single"?"Single cam":"Quad sim"}{s.usedPose?" · Pose":""}</div>
               </div>
               <div style={{color:"#444",fontSize:14}}>{expanded===i?"▲":"▼"}</div>
             </div>
-
-            {/* Expanded metrics */}
             {expanded===i&&s.avgMetrics&&(
               <div style={{padding:"0 14px 14px",borderTop:"1px solid #1A1A1A"}}>
                 <div style={{fontSize:10,color:"#555",letterSpacing:2,textTransform:"uppercase",margin:"10px 0 8px"}}>Metric Averages</div>
@@ -442,30 +330,14 @@ function HistoryModal({sessions,onClose,onClear}){
                     </div>
                   );
                 })}
-                {/* Set breakdown */}
-                {s.sets&&(
-                  <>
-                    <div style={{fontSize:10,color:"#555",letterSpacing:2,textTransform:"uppercase",margin:"12px 0 8px"}}>Set Scores</div>
-                    <div style={{display:"flex",gap:8}}>
-                      {s.sets.map(set=>(
-                        <div key={set.setNumber} style={{flex:1,background:"#0D0D0D",borderRadius:6,padding:"8px",textAlign:"center"}}>
-                          <div style={{fontSize:9,color:"#555",marginBottom:3}}>S{set.setNumber}</div>
-                          <div style={{fontSize:18,fontWeight:800,color:mc2(set.score)}}>{set.score}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
             )}
           </div>
         ))}
       </div>
-
-      {/* Clear button */}
       <div style={{padding:"12px 16px",borderTop:"1px solid #1A1A1A",flexShrink:0,background:"#0D0D0D"}}>
-        <button onClick={()=>{if(window.confirm("Clear all session history? This cannot be undone."))onClear();}}
-          style={{width:"100%",padding:"12px",background:"transparent",color:"#555",border:"1px solid #222",borderRadius:8,cursor:"pointer",fontSize:13}}>
+        <button onClick={()=>{if(window.confirm("Clear all session history?"))onClear();}}
+          style={{width:"100%",padding:"12px",background:"transparent",color:"#555",border:"1px solid #222",borderRadius:8,cursor:"pointer",fontSize:13,fontFamily:"system-ui"}}>
           🗑 Clear All History
         </button>
       </div>
@@ -473,11 +345,11 @@ function HistoryModal({sessions,onClose,onClear}){
   );
 }
 
-// ── ScreenName Modal ──────────────────────────────────────────────────────
+// ── ScreenName Modal ──────────────────────────────────────────
 function ScreenNameModal({value,onSave}){
   const [n,setN]=useState(value||"");
   return(
-    <div style={{position:"fixed",inset:0,background:"#000000CC",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:20}}>
+    <div style={{position:"fixed",inset:0,background:"#000000CC",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:20,fontFamily:"system-ui"}}>
       <div style={{background:"#111",border:"1px solid #333",borderRadius:14,padding:"28px 24px",maxWidth:380,width:"100%"}}>
         <div style={{fontSize:22,marginBottom:6,textAlign:"center"}}>🏋️</div>
         <div style={{fontSize:16,fontWeight:700,color:"#F0F0F0",textAlign:"center",marginBottom:6}}>What should we call you?</div>
@@ -486,13 +358,13 @@ function ScreenNameModal({value,onSave}){
           onKeyDown={e=>e.key==="Enter"&&n.trim()&&onSave(n.trim())}
           placeholder="e.g. Adams, Coach K, Big Lifts..."
           maxLength={28}
-          style={{width:"100%",padding:"13px 14px",background:"#1A1A1A",border:"1px solid #333",borderRadius:8,color:"#F0F0F0",fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:14}}/>
+          style={{width:"100%",padding:"13px 14px",background:"#1A1A1A",border:"1px solid #333",borderRadius:8,color:"#F0F0F0",fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:14,fontFamily:"system-ui"}}/>
         <button onClick={()=>n.trim()&&onSave(n.trim())}
-          style={{width:"100%",padding:"14px",background:"#00E676",color:"#000",border:"none",borderRadius:8,fontWeight:800,fontSize:14,cursor:"pointer",letterSpacing:2,textTransform:"uppercase"}}>
+          style={{width:"100%",padding:"14px",background:"#00E676",color:"#000",border:"none",borderRadius:8,fontWeight:800,fontSize:14,cursor:"pointer",letterSpacing:2,textTransform:"uppercase",fontFamily:"system-ui"}}>
           Save & Generate Report
         </button>
         <button onClick={()=>onSave("")}
-          style={{width:"100%",padding:"10px",background:"transparent",color:"#888",border:"none",cursor:"pointer",fontSize:12,marginTop:8}}>
+          style={{width:"100%",padding:"10px",background:"transparent",color:"#888",border:"none",cursor:"pointer",fontSize:12,marginTop:8,fontFamily:"system-ui"}}>
           Skip — share without name
         </button>
       </div>
@@ -500,60 +372,29 @@ function ScreenNameModal({value,onSave}){
   );
 }
 
-// ── Share Modal ───────────────────────────────────────────────────────────
+// ── Share Modal ───────────────────────────────────────────────
 function ShareModal({canvas,onClose}){
   const [status,setStatus]=useState("idle");
   const [errMsg,setErrMsg]=useState("");
   const previewUrl=canvas.toDataURL("image/png");
   const getPngBlob=()=>new Promise(res=>canvas.toBlob(res,"image/png"));
-
   const shareViaSheet=async()=>{
-    setStatus("sharing"); setErrMsg("");
+    setStatus("sharing");setErrMsg("");
     try{
       const blob=await getPngBlob();
       const file=new File([blob],"FormIQ-Session-Report.png",{type:"image/png"});
-      const shareData={
-        title:"My FormIQ Squat Session",
-        text:`Check out my squat form report from FormIQ AI 🏋️ — try it free at https://${SITE}`,
-        files:[file],
-      };
-      if(navigator.share&&navigator.canShare&&navigator.canShare(shareData)){
-        await navigator.share(shareData);
-        setStatus("done");
-      } else if(navigator.share){
-        await navigator.share({title:"FormIQ — AI Squat Coach",text:`I just tracked my squat form with FormIQ AI 🏋️ — try it free at https://${SITE}`,url:`https://${SITE}`});
-        setStatus("done");
-      } else {
-        setErrMsg("Your browser doesn't support native sharing. Download the PNG and share it manually.");
-        setStatus("error");
-      }
-    } catch(e){
-      if(e.name==="AbortError"){setStatus("idle");}
-      else{setErrMsg("Sharing failed — download the image below and share it yourself.");setStatus("error");}
-    }
+      const shareData={title:"My FormIQ Squat Session",text:`Check out my squat form report from FormIQ AI 🏋️ — try it free at https://${SITE}`,files:[file]};
+      if(navigator.share&&navigator.canShare&&navigator.canShare(shareData)){await navigator.share(shareData);setStatus("done");}
+      else if(navigator.share){await navigator.share({title:"FormIQ — AI Squat Coach",text:`I just tracked my squat form with FormIQ AI 🏋️ — try it free at https://${SITE}`,url:`https://${SITE}`});setStatus("done");}
+      else{setErrMsg("Your browser doesn't support native sharing. Download the PNG below.");setStatus("error");}
+    }catch(e){if(e.name==="AbortError"){setStatus("idle");}else{setErrMsg("Sharing failed — download below.");setStatus("error");}}
   };
-
-  const downloadPng=async()=>{
-    const blob=await getPngBlob();
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");
-    a.href=url; a.download="FormIQ-Session-Report.png"; a.click();
-    URL.revokeObjectURL(url); setStatus("idle");
-  };
-
+  const downloadPng=async()=>{const blob=await getPngBlob();const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="FormIQ-Session-Report.png";a.click();URL.revokeObjectURL(url);setStatus("idle");};
   const btn=(bg,col,border,onClick,disabled,children)=>(
-    <button onClick={onClick} disabled={disabled} style={{
-      display:"flex",alignItems:"center",justifyContent:"center",gap:10,
-      width:"100%",padding:"15px",background:disabled?"#1A1A1A":bg,
-      color:disabled?"#555":col,border:border||"none",borderRadius:10,
-      fontWeight:700,fontSize:14,cursor:disabled?"default":"pointer",
-      letterSpacing:1,textTransform:"uppercase",marginBottom:10,opacity:disabled?.6:1}}>
-      {children}
-    </button>
+    <button onClick={onClick} disabled={disabled} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,width:"100%",padding:"15px",background:disabled?"#1A1A1A":bg,color:disabled?"#555":col,border:border||"none",borderRadius:10,fontWeight:700,fontSize:14,cursor:disabled?"default":"pointer",letterSpacing:1,textTransform:"uppercase",marginBottom:10,opacity:disabled?.6:1,fontFamily:"system-ui"}}>{children}</button>
   );
-
   return(
-    <div style={{position:"fixed",inset:0,background:"#000000E0",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:9999}}>
+    <div style={{position:"fixed",inset:0,background:"#000000E0",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:9999,fontFamily:"system-ui"}}>
       <div style={{background:"#111",borderTop:"1px solid #333",borderRadius:"20px 20px 0 0",width:"100%",maxWidth:560,padding:"20px 20px 40px",maxHeight:"92vh",overflowY:"auto"}}>
         <div style={{width:36,height:4,background:"#333",borderRadius:2,margin:"0 auto 18px"}}/>
         <div style={{fontSize:15,fontWeight:700,color:"#F0F0F0",marginBottom:3,textAlign:"center"}}>Share Session Report</div>
@@ -561,29 +402,20 @@ function ShareModal({canvas,onClose}){
         <div style={{borderRadius:10,overflow:"hidden",marginBottom:18,border:"1px solid #222",background:"#000",maxHeight:320,overflowY:"hidden"}}>
           <img src={previewUrl} alt="Report" style={{width:"100%",display:"block"}}/>
         </div>
-        {errMsg&&(
-          <div style={{background:"#FF3D3D18",border:"1px solid #FF3D3D40",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#FF9999",lineHeight:1.5}}>{errMsg}</div>
-        )}
-        {btn("#00E676","#000","none",shareViaSheet,status==="sharing",
-          <><span style={{fontSize:20}}>{status==="sharing"?"⏳":status==="done"?"✅":"📤"}</span>
-          <span>{status==="sharing"?"Opening share sheet...":status==="done"?"Shared successfully!":"Share via WhatsApp / Telegram / Any App"}</span></>
-        )}
+        {errMsg&&<div style={{background:"#FF3D3D18",border:"1px solid #FF3D3D40",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#FF9999",lineHeight:1.5}}>{errMsg}</div>}
+        {btn("#00E676","#000","none",shareViaSheet,status==="sharing",<><span style={{fontSize:20}}>{status==="sharing"?"⏳":status==="done"?"✅":"📤"}</span><span>{status==="sharing"?"Opening share sheet...":status==="done"?"Shared!":"Share via WhatsApp / Telegram / Any App"}</span></>)}
         <div style={{background:"#1A1A1A",border:"1px solid #2A2A2A",borderRadius:8,padding:"10px 14px",marginBottom:10}}>
-          <div style={{fontSize:11,color:"#AAAAAA",lineHeight:1.7}}>
-            <strong style={{color:"#CCCCCC"}}>How it works:</strong> Tapping above opens your device's native share sheet — the same one you use to share photos. Select WhatsApp, Telegram, Instagram, or any app. The full report image is attached automatically.
-          </div>
+          <div style={{fontSize:11,color:"#AAAAAA",lineHeight:1.7}}><strong style={{color:"#CCCCCC"}}>How it works:</strong> Tap above to open your device's native share sheet. Select WhatsApp, Telegram, Instagram, or any app. The full report image is attached automatically.</div>
         </div>
-        {btn("#1A1A1A","#CCCCCC","1px solid #333",downloadPng,false,
-          <><span style={{fontSize:18}}>⬇️</span><span>Download PNG (share manually)</span></>
-        )}
-        <button onClick={onClose} style={{width:"100%",padding:"13px",background:"transparent",color:"#777",border:"none",cursor:"pointer",fontSize:13,marginTop:4}}>Close</button>
+        {btn("#1A1A1A","#CCCCCC","1px solid #333",downloadPng,false,<><span style={{fontSize:18}}>⬇️</span><span>Download PNG</span></>)}
+        <button onClick={onClose} style={{width:"100%",padding:"13px",background:"transparent",color:"#777",border:"none",cursor:"pointer",fontSize:13,marginTop:4,fontFamily:"system-ui"}}>Close</button>
       </div>
     </div>
   );
 }
 
 // ══════════════════════════════════════════════════════════════
-// MAIN
+// FORMIQ SQUAT APP
 // ══════════════════════════════════════════════════════════════
 function FormIQ({ onBack, clientCtx }){
   const [screen,setScreen]         = useState("setup");
@@ -614,21 +446,23 @@ function FormIQ({ onBack, clientCtx }){
   const [shareCanvas,setShareCanvas]    = useState(null);
   const [logoImg,setLogoImg]       = useState(null);
   const [logo512Img,setLogo512Img] = useState(null);
-  // ── Calibration & History ────────────────────────────────────────────────
-  const [calibrated,setCalibrated]     = useState(false);
-  const [calStep,setCalStep]           = useState(0); // 0..3 steps
+  const [calibrated,setCalibrated] = useState(false);
+  const [calStep,setCalStep]       = useState(0);
   const [poseDetected,setPoseDetected] = useState(false);
-  const [sessionLog,setSessionLog]     = useState(()=>loadSessions());
-  const [showHistory,setShowHistory]   = useState(false);
+  const [sessionLog,setSessionLog] = useState(()=>loadSessions());
+  const [showHistory,setShowHistory] = useState(false);
+  // Free session gate
+  const [showPaywall,setShowPaywall] = useState(false);
+  const [sessionAllowed,setSessionAllowed] = useState(true);
 
-  const videoRef=useRef(null), canvasRef=useRef(null), streamRef=useRef(null);
-  const poseRef=useRef(null), animFrameRef=useRef(null), historyRef=useRef([]);
-  const repsRef=useRef(0), curSetRef=useRef(1), totalSetsRef=useRef(3);
-  const analyzingRef=useRef(false), repStateRef=useRef("up");
-  const repDataRef=useRef([]), currentRepRef=useRef(null);
-  const finishSetRef=useRef(null), onResultsRef=useRef(null);
+  const videoRef=useRef(null),canvasRef=useRef(null),streamRef=useRef(null);
+  const poseRef=useRef(null),animFrameRef=useRef(null),historyRef=useRef([]);
+  const repsRef=useRef(0),curSetRef=useRef(1),totalSetsRef=useRef(3);
+  const analyzingRef=useRef(false),repStateRef=useRef("up");
+  const repDataRef=useRef([]),currentRepRef=useRef(null);
+  const finishSetRef=useRef(null),onResultsRef=useRef(null);
 
-  const REPS=10, REST=90, DOWN_T=112, UP_T=158;
+  const REPS=10,REST=90,DOWN_T=112,UP_T=158;
 
   useEffect(()=>{repsRef.current=reps;},[reps]);
   useEffect(()=>{curSetRef.current=curSet;},[curSet]);
@@ -641,13 +475,21 @@ function FormIQ({ onBack, clientCtx }){
     load(`${process.env.PUBLIC_URL}/logo512.png`,setLogo512Img);
   },[]);
 
+  // Check if session is allowed when cam mode selected
+  const checkAndStartSession = (mode) => {
+    if (clientCtx) { setCamMode(mode); return; } // invited clients bypass gate
+    const allowed = isSessionAllowed(mode);
+    if (!allowed) { setCamMode(mode); setShowPaywall(true); return; }
+    setCamMode(mode);
+  };
+
   onResultsRef.current=(results)=>{
     if(!canvasRef.current||!videoRef.current)return;
-    const canvas=canvasRef.current, ctx=canvas.getContext("2d");
-    const W=videoRef.current.videoWidth||640, H=videoRef.current.videoHeight||480;
-    canvas.width=W; canvas.height=H; ctx.clearRect(0,0,W,H);
+    const canvas=canvasRef.current,ctx=canvas.getContext("2d");
+    const W=videoRef.current.videoWidth||640,H=videoRef.current.videoHeight||480;
+    canvas.width=W;canvas.height=H;ctx.clearRect(0,0,W,H);
     if(!results.poseLandmarks)return;
-    setPoseDetected(true); // signal to calibration screen
+    setPoseDetected(true);
     const lm=results.poseLandmarks;
     const vis=(i)=>(lm[i]?.visibility||0)>0.32;
     const px=(i)=>({x:lm[i].x*W,y:lm[i].y*H});
@@ -661,22 +503,19 @@ function FormIQ({ onBack, clientCtx }){
     const kneeForward=allVis?(pK.x-pA.x)/(W*0.09):0;
     const kneeAlignScore=Math.max(20,Math.min(100,100-Math.max(0,kneeForward-0.5)*18));
     const boneColor=kneeAngle===null?C.blue:kneeAngle<95?C.accent:kneeAngle<132?C.warn:C.blue;
-    ctx.lineCap="round"; ctx.lineJoin="round";
+    ctx.lineCap="round";ctx.lineJoin="round";
     BONES.forEach(([a,b])=>{
       if(!lm[a]||!lm[b]||(lm[a].visibility||0)<0.28||(lm[b].visibility||0)<0.28)return;
-      ctx.strokeStyle=boneColor+"CC"; ctx.lineWidth=2.5;
+      ctx.strokeStyle=boneColor+"CC";ctx.lineWidth=2.5;
       ctx.beginPath();ctx.moveTo(lm[a].x*W,lm[a].y*H);ctx.lineTo(lm[b].x*W,lm[b].y*H);ctx.stroke();
     });
     KEY_POINTS.forEach(i=>{
       if(!vis(i))return;
       ctx.beginPath();ctx.arc(lm[i].x*W,lm[i].y*H,i>=23?6:4,0,Math.PI*2);
-      ctx.fillStyle=boneColor;ctx.fill();
-      ctx.strokeStyle="#00000080";ctx.lineWidth=1.2;ctx.stroke();
+      ctx.fillStyle=boneColor;ctx.fill();ctx.strokeStyle="#00000080";ctx.lineWidth=1.2;ctx.stroke();
     });
     if(kneeAngle!==null&&!analyzingRef.current&&repsRef.current<REPS){
-      if(!currentRepRef.current){
-        currentRepRef.current={startTime:Date.now(),minKneeAngle:kneeAngle,kneeAngles:[],spineAngles:[],hipAngles:[],kneeAlignScores:[]};
-      }
+      if(!currentRepRef.current){currentRepRef.current={startTime:Date.now(),minKneeAngle:kneeAngle,kneeAngles:[],spineAngles:[],hipAngles:[],kneeAlignScores:[]};}
       const cr=currentRepRef.current;
       cr.minKneeAngle=Math.min(cr.minKneeAngle,kneeAngle);
       cr.kneeAngles.push(kneeAngle);
@@ -723,9 +562,7 @@ function FormIQ({ onBack, clientCtx }){
       const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1280},height:{ideal:720}},audio:false});
       streamRef.current=stream;
       if(videoRef.current){videoRef.current.srcObject=stream;videoRef.current.onloadedmetadata=()=>{videoRef.current.play();setCamReady(true);};}
-    }catch(err){
-      setCamError(err.name==="NotAllowedError"?"Camera permission denied. Allow access in browser settings.":err.name==="NotFoundError"?"No camera found on this device.":"Could not start camera: "+err.message);
-    }
+    }catch(err){setCamError(err.name==="NotAllowedError"?"Camera permission denied. Allow access in browser settings.":err.name==="NotFoundError"?"No camera found on this device.":"Could not start camera: "+err.message);}
   };
 
   const stopCamera=()=>{
@@ -742,7 +579,7 @@ function FormIQ({ onBack, clientCtx }){
     const loop=async()=>{if(!running)return;if(videoRef.current?.readyState>=2){try{await poseRef.current.send({image:videoRef.current});}catch{}}if(running)animFrameRef.current=requestAnimationFrame(loop);};
     animFrameRef.current=requestAnimationFrame(loop);
     return()=>{running=false;cancelAnimationFrame(animFrameRef.current);};
-  },[camReady,camMode]); // eslint-disable-line
+  },[camReady,camMode]);// eslint-disable-line
 
   useEffect(()=>{
     if(poseStatus==="ready"&&camReady&&camMode==="single"){
@@ -752,16 +589,22 @@ function FormIQ({ onBack, clientCtx }){
       animFrameRef.current=requestAnimationFrame(loop);
       return()=>{running=false;cancelAnimationFrame(animFrameRef.current);};
     }
-  },[poseStatus,camReady,camMode]); // eslint-disable-line
+  },[poseStatus,camReady,camMode]);// eslint-disable-line
 
-  useEffect(()=>{if(screen==="workout"&&camMode==="single"){startCamera(facingMode);loadPose();}if(screen!=="workout")stopCamera();},[screen,camMode]); // eslint-disable-line
+  useEffect(()=>{if(screen==="workout"&&camMode==="single"){startCamera(facingMode);loadPose();}if(screen!=="workout")stopCamera();},[screen,camMode]);// eslint-disable-line
   useEffect(()=>{if(screen!=="workout")return;const t=setInterval(()=>setTipI(i=>(i+1)%TIPS.length),4500);return()=>clearInterval(t);},[screen]);
   useEffect(()=>{const t=setInterval(()=>setScan(s=>(s+1.2)%100),35);return()=>clearInterval(t);},[]);
   useEffect(()=>{if(!analyzing)return;const t=setInterval(()=>setDots(d=>(d+1)%4),450);return()=>clearInterval(t);},[analyzing]);
-  useEffect(()=>{if(!resting)return;const t=setInterval(()=>setRestT(r=>{if(r>=REST-1){setResting(false);setRestT(0);return 0;}return r+1;}),1000);return()=>clearInterval(t);},[resting]);
+  useEffect(()=>{
+    if(!resting)return;
+    const t=setInterval(()=>setRestT(r=>{if(r>=REST-1){setResting(false);setRestT(0);return 0;}return r+1;}),1000);
+    return()=>clearInterval(t);
+  },[resting]);
 
   const finishSet=async()=>{
     if(analyzingRef.current)return;
+    // Increment session usage in db
+    if(!clientCtx) incrementSession(camMode||"single");
     const realM=(camMode==="single"&&poseStatus==="ready"&&repDataRef.current.length>=2)?calcRealMetrics(repDataRef.current):null;
     const m=realM||mkSimMetrics(curSetRef.current);
     const score=calcScore(m);
@@ -776,12 +619,7 @@ function FormIQ({ onBack, clientCtx }){
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:
           `You are an elite strength coach. Athlete finished Set ${curSetRef.current} of ${totalSetsRef.current} (10 squats). ${realM?"Live pose data:":"Simulated data:"}
-Knee Alignment: ${m.kneeAlignment}/100
-Spine Neutrality: ${m.spineNeutrality}/100
-Squat Depth: ${m.squatDepth}/100
-Tempo Control: ${m.tempoConsistency}/100
-Hip Hinge: ${m.hipHinge}/100
-Set Score: ${score}/100
+Knee Alignment: ${m.kneeAlignment}/100\nSpine Neutrality: ${m.spineNeutrality}/100\nSquat Depth: ${m.squatDepth}/100\nTempo Control: ${m.tempoConsistency}/100\nHip Hinge: ${m.hipHinge}/100\nSet Score: ${score}/100
 Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})});
       const d=await res.json();
       const text=d.content?.map(b=>b.text||"").join("").trim();
@@ -794,27 +632,19 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
   const nextSet=()=>{
     if(curSet>=totalSets){
       const h=historyRef.current;
-      const avg=h.length?Math.round(h.reduce((s,e)=>s+e.score,0)/h.length):0;
-      setFinalScore(avg);
-      // Save to persistent session history
+      const fs=h.length?Math.round(h.reduce((s,e)=>s+e.score,0)/h.length):0;
+      setFinalScore(fs);
+      // Save to session history
       const sessionEntry={
-        id:Date.now(),
-        date:new Date().toISOString(),
-        score:avg,
-        totalSets,
-        totalReps:totalSets*10,
-        camMode,
+        id:Date.now(),date:new Date().toISOString(),score:fs,
+        totalSets,totalReps:totalSets*10,camMode,
         usedPose:h.some(s=>s.usedPose),
         sets:h.map(s=>({setNumber:s.setNumber,score:s.score,usedPose:s.usedPose})),
-        avgMetrics:METRICS_DEF.reduce((acc,{key})=>({
-          ...acc,
-          [key]:h.length?Math.round(h.reduce((sum,e)=>sum+e.metrics[key],0)/h.length):0
-        }),{}),
+        avgMetrics:METRICS_DEF.reduce((acc,{key})=>({...acc,[key]:h.length?Math.round(h.reduce((sum,e)=>sum+e.metrics[key],0)/h.length):0}),{}),
       };
-      saveSession(sessionEntry);
-      setSessionLog(loadSessions());
+      saveSession(sessionEntry);setSessionLog(loadSessions());
       setScreen("results");
-    } else {
+    }else{
       const n=curSet+1;setCurSet(n);curSetRef.current=n;
       setReps(0);repsRef.current=0;setFeedback("");setMetrics(null);setScreen("workout");
     }
@@ -825,7 +655,6 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     const c=generateReportCanvas({screenName,finalScore:fs,history:h,totalSets:ts,REPS,logoImg,logo512Img});
     setShareCanvas(c);
   };
-
   const onNameSave=(name)=>{
     setScreenName(name);if(name)localStorage.setItem("fiq_name",name);
     setShowNameModal(false);
@@ -840,8 +669,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     setResting(false);setRestT(0);setTotalSets(3);totalSetsRef.current=3;
     setCamError("");setCamReady(false);setPoseStatus("idle");poseRef.current=null;
     setFormAlerts([]);setLiveAngles(null);repDataRef.current=[];repStateRef.current="up";
-    currentRepRef.current=null;setShareCanvas(null);
-    setCalibrated(false);setCalStep(0);setPoseDetected(false);
+    currentRepRef.current=null;setShareCanvas(null);setCalibrated(false);setCalStep(0);setPoseDetected(false);
   };
 
   const tapRep=()=>{
@@ -858,9 +686,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
   const pil=(a)=>({width:36,height:36,borderRadius:8,cursor:"pointer",background:a?C.accent:C.s2,color:a?"#000":C.text,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14});
   const lbl={fontSize:10,letterSpacing:3,color:C.muted,textTransform:"uppercase",fontWeight:600};
 
-  // ════════════════════════════════════════════════════════════
-  // SETUP
-  // ════════════════════════════════════════════════════════════
+  // ── SETUP ────────────────────────────────────────────────────
   if(screen==="setup") return(
     <div style={{...page,padding:"28px 20px 32px"}}>
       <style>{`
@@ -876,26 +702,19 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
       `}</style>
       <div style={{maxWidth:560,margin:"0 auto"}}>
 
-        {/* ── CO-BRANDED HERO (invited client) ── */}
+        {/* Hero — co-branded if invited client, normal otherwise */}
         {clientCtx ? (
           <div className="fu fu1" style={{marginBottom:28}}>
             <CoachBrandedBanner ctx={clientCtx} fullHeader/>
           </div>
         ) : (
-          /* ── NORMAL HERO ── */
           <div className="fu fu1" style={{textAlign:"center",marginBottom:36}}>
-            <button onClick={onBack} style={{
-              display:"inline-flex",alignItems:"center",gap:6,
-              background:"transparent",border:`1px solid ${C.border}`,
-              color:C.mutedLight,borderRadius:8,padding:"6px 14px",
-              cursor:"pointer",fontSize:12,fontWeight:600,marginBottom:16,
-              fontFamily:"system-ui",
-            }}>← Home</button>
+            {onBack&&(
+              <button onClick={onBack} style={{display:"inline-flex",alignItems:"center",gap:6,background:"transparent",border:`1px solid ${C.border}`,color:C.mutedLight,borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,marginBottom:16,fontFamily:font}}>← Home</button>
+            )}
             <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
               style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
-            <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:C.accent,
-              textTransform:"uppercase",fontWeight:600,background:C.accent+"15",
-              padding:"4px 14px",borderRadius:20,border:`1px solid ${C.accent}30`}}>
+            <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:C.accent,textTransform:"uppercase",fontWeight:600,background:C.accent+"15",padding:"4px 14px",borderRadius:20,border:`1px solid ${C.accent}30`}}>
               AI Squat Coach
             </div>
             <div style={{color:C.mutedLight,marginTop:12,fontSize:14}}>
@@ -904,34 +723,37 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           </div>
         )}
 
+        {/* Camera cards */}
         <div className="fu fu2" style={{marginBottom:18}}>
           <div style={{...lbl,marginBottom:10}}>Camera Setup</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             {[
               {id:"single",title:"Single Camera",badge:"LIVE NOW",locked:false,
                lines:["Uses your device camera","Side-on view recommended","Webcam or phone"],
-               note:"✓ Real pose tracking active"},
+               note:`✓ ${sessionsRemaining("single")===Infinity?"Unlimited":sessionsRemaining("single")+" free sessions left"}`},
               {id:"quad-4k",title:"Quad 4K System",badge:"COMING SOON",locked:true,
                lines:["4× cameras via HDMI","Front·Back·Left·Right","Capture card required"],
-               note:"🔒 Multi-cam phase"},
+               note:`${sessionsRemaining("quad-4k")===Infinity?"Unlimited":sessionsRemaining("quad-4k")+" test sessions left"}`},
             ].map(({id,title,badge,locked,lines,note})=>(
-              <div key={id} className="cc" onClick={()=>setCamMode(id)} style={{
+              <div key={id} className="cc" onClick={()=>checkAndStartSession(id)} style={{
                 ...card(false),cursor:"pointer",
                 border:`1px solid ${camMode===id?C.accent:C.border}`,
                 background:camMode===id?"#071510":C.surface,
                 position:"relative",opacity:locked&&camMode!==id?.78:1,
                 transition:"border-color .2s,background .2s"}}>
-                <div style={{position:"absolute",top:12,right:12,fontSize:9,fontWeight:700,
-                  letterSpacing:1.5,padding:"3px 8px",borderRadius:4,
-                  background:locked?C.s3:(camMode===id?C.accent:C.s2),
-                  color:locked?C.warn:(camMode===id?"#000":C.muted),
-                  border:locked?`1px solid ${C.warn}40`:"none"}}>{badge}</div>
+                <div style={{position:"absolute",top:12,right:12,fontSize:9,fontWeight:700,letterSpacing:1.5,padding:"3px 8px",borderRadius:4,background:locked?C.s3:(camMode===id?C.accent:C.s2),color:locked?C.warn:(camMode===id?"#000":C.muted),border:locked?`1px solid ${C.warn}40`:"none"}}>{badge}</div>
                 <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>{title}</div>
                 {lines.map((l,i)=><div key={i} style={{fontSize:12,color:C.mutedLight,lineHeight:1.7}}>{l}</div>)}
                 <div style={{marginTop:10,fontSize:11,fontWeight:600,color:locked?C.warn:C.accent}}>{note}</div>
               </div>
             ))}
           </div>
+          {/* Session badge */}
+          {camMode&&!clientCtx&&(
+            <div style={{marginTop:10}}>
+              <SessionBadge camMode={camMode}/>
+            </div>
+          )}
         </div>
 
         <div className="fu fu3" style={{...card(false),marginBottom:18}}>
@@ -947,44 +769,32 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           </div>
         </div>
 
-        <div className="fu fu4" style={{...card(false),marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div>
-            <div style={{fontWeight:600,fontSize:14,color:C.text}}>
-              {screenName?`👤 ${screenName}`:"Set your name for reports"}
+        {!clientCtx&&(
+          <div className="fu fu4" style={{...card(false),marginBottom:18,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{fontWeight:600,fontSize:14,color:C.text}}>{screenName?`👤 ${screenName}`:"Set your name for reports"}</div>
+              <div style={{fontSize:12,color:C.mutedLight,marginTop:3}}>{screenName?"Shown on shared session reports":"Optional · appears on your share card"}</div>
             </div>
-            <div style={{fontSize:12,color:C.mutedLight,marginTop:3}}>
-              {screenName?"Shown on shared session reports":"Optional · appears on your share card"}
-            </div>
+            <button onClick={()=>setShowNameModal(true)} style={{padding:"8px 14px",background:C.s2,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,whiteSpace:"nowrap",fontFamily:font}}>
+              {screenName?"Edit":"Set Name"}
+            </button>
           </div>
-          <button onClick={()=>setShowNameModal(true)} style={{
-            padding:"8px 14px",background:C.s2,color:C.text,border:`1px solid ${C.border}`,
-            borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,whiteSpace:"nowrap"}}>
-            {screenName?"Edit":"Set Name"}
-          </button>
-        </div>
+        )}
 
         <div className="fu fu5">
           <button onClick={()=>{
             if(!camMode)return;
-            if(camMode==="single"){setScreen("calibrate");}
-            else{setScreen("workout");}
-          }} style={{
-            width:"100%",padding:"18px",fontSize:15,fontWeight:800,
-            background:camMode?C.accent:C.s3,color:camMode?"#000":C.muted,
-            border:"none",borderRadius:10,cursor:camMode?"pointer":"default",
-            letterSpacing:2.5,textTransform:"uppercase",transition:"all .25s"}}>
+            if(!isSessionAllowed(camMode)&&!clientCtx){setShowPaywall(true);return;}
+            if(camMode==="single"){setScreen("calibrate");}else{setScreen("workout");}
+          }} style={{width:"100%",padding:"18px",fontSize:15,fontWeight:800,background:camMode?C.accent:C.s3,color:camMode?"#000":C.muted,border:"none",borderRadius:10,cursor:camMode?"pointer":"default",letterSpacing:2.5,textTransform:"uppercase",transition:"all .25s",fontFamily:font}}>
             {!camMode?"Select a camera mode to start":camMode==="single"?"Calibrate & Begin →":"Preview Simulation →"}
           </button>
         </div>
 
-        {/* Session history button */}
-        {sessionLog.length>0&&(
+        {!clientCtx&&sessionLog.length>0&&(
           <div style={{marginTop:14,textAlign:"center"}}>
-            <button onClick={()=>setShowHistory(true)} style={{
-              background:"transparent",border:`1px solid ${C.border}`,
-              color:C.mutedLight,borderRadius:8,padding:"8px 18px",
-              cursor:"pointer",fontSize:12,fontWeight:600}}>
-              📈 Session History ({sessionLog.length} session{sessionLog.length!==1?"s":""})
+            <button onClick={()=>setShowHistory(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.mutedLight,borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:font}}>
+              📈 Session History ({sessionLog.length})
             </button>
           </div>
         )}
@@ -995,126 +805,60 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           ))}
         </div>
       </div>
+
       {showNameModal&&<ScreenNameModal value={screenName} onSave={onNameSave}/>}
-      {showHistory&&<HistoryModal sessions={sessionLog} onClose={()=>setShowHistory(false)}
-        onClear={()=>{clearSessions();setSessionLog([]);setShowHistory(false);}}/>}
+      {showHistory&&<HistoryModal sessions={sessionLog} onClose={()=>setShowHistory(false)} onClear={()=>{clearSessions();setSessionLog([]);setShowHistory(false);}}/>}
+      {showPaywall&&<PaywallModal camMode={camMode||"single"} onPaid={()=>{setShowPaywall(false);setSessionAllowed(true);}} onClose={()=>setShowPaywall(false)}/>}
     </div>
   );
 
-  // ════════════════════════════════════════════════════════════
-  // CALIBRATION
-  // ════════════════════════════════════════════════════════════
+  // ── CALIBRATION ──────────────────────────────────────────────
   if(screen==="calibrate"){
     const CAL_STEPS=[
-      {
-        icon:"📐",
-        title:"Position your camera",
-        body:"Place your phone or webcam to the side — your full body from head to feet must be visible. Ideal distance: 6–8 feet from the camera.",
-        visual:(
-          <div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:24,padding:"12px 0"}}>
-            <div style={{textAlign:"center"}}>
-              <div style={{fontSize:32,marginBottom:4}}>📱</div>
-              <div style={{fontSize:10,color:C.mutedLight,letterSpacing:1}}>CAMERA</div>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
-              <div style={{height:2,width:80,background:`repeating-linear-gradient(90deg,${C.accent} 0,${C.accent} 6px,transparent 6px,transparent 12px)`}}/>
-              <div style={{fontSize:11,color:C.mutedLight}}>6–8 ft</div>
-            </div>
-            <div style={{textAlign:"center"}}>
-              <div style={{fontSize:32,marginBottom:4}}>🏋️</div>
-              <div style={{fontSize:10,color:C.mutedLight,letterSpacing:1}}>YOU</div>
-            </div>
-          </div>
-        ),
-      },
-      {
-        icon:"↔️",
-        title:"Stand side-on to the camera",
-        body:"Face left or right — not toward the camera. Your left or right side should face the lens so MediaPipe can track your knee, hip, and spine angles accurately.",
-        visual:(
-          <div style={{display:"flex",justifyContent:"center",gap:32,padding:"12px 0"}}>
-            {[{label:"✅ CORRECT",sub:"Side view",ok:true},{label:"❌ WRONG",sub:"Facing camera",ok:false}].map(({label,sub,ok})=>(
-              <div key={label} style={{textAlign:"center"}}>
-                <div style={{
-                  width:60,height:80,borderRadius:8,marginBottom:6,
-                  background:ok?C.accent+"18":C.danger+"18",
-                  border:`1.5px solid ${ok?C.accent:C.danger}`,
-                  display:"flex",alignItems:"center",justifyContent:"center",
-                  fontSize:28,
-                }}>
-                  {ok?"🚶":"🧍"}
-                </div>
-                <div style={{fontSize:10,fontWeight:700,color:ok?C.accent:C.danger}}>{label}</div>
-                <div style={{fontSize:10,color:C.mutedLight}}>{sub}</div>
-              </div>
-            ))}
-          </div>
-        ),
-      },
-      {
-        icon:"💡",
-        title:"Lighting & background",
-        body:"Good lighting helps the AI track you accurately. Stand against a plain background if possible and avoid bright lights directly behind you.",
-        visual:(
-          <div style={{display:"flex",justifyContent:"center",gap:20,padding:"12px 0"}}>
-            {[{e:"☀️",l:"Natural light",ok:true},{e:"🌑",l:"Dark room",ok:false},{e:"🔦",l:"Backlight",ok:false}].map(({e,l,ok})=>(
-              <div key={l} style={{textAlign:"center"}}>
-                <div style={{fontSize:28,marginBottom:4}}>{e}</div>
-                <div style={{fontSize:10,color:ok?C.accent:C.danger,fontWeight:600}}>{ok?"✓":"✗"}</div>
-                <div style={{fontSize:10,color:C.mutedLight}}>{l}</div>
-              </div>
-            ))}
-          </div>
-        ),
-      },
-      {
-        icon:"🤖",
-        title:"Confirm pose tracking",
-        body:poseDetected
-          ?"✅ Pose tracking is active — your skeleton is visible. You're ready to squat!"
-          :"Stand in frame now. The AI is loading and will detect your pose automatically. Wait for the green confirmation.",
-        visual:(
-          <div style={{position:"relative",borderRadius:10,overflow:"hidden",background:"#000",height:160}}>
-            <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-            <canvas ref={canvasRef} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}/>
-            <div style={{
-              position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",
-              background:poseDetected?"#00E67622":"#00000088",
-              border:`1.5px solid ${poseDetected?C.accent:C.border}`,
-              borderRadius:8,padding:"5px 14px",whiteSpace:"nowrap",
-              display:"flex",alignItems:"center",gap:7,
-            }}>
-              {poseDetected
-                ?<><div style={{width:7,height:7,borderRadius:"50%",background:C.accent}}/><span style={{fontSize:11,color:C.accent,fontWeight:700,letterSpacing:1}}>POSE DETECTED</span></>
-                :<span style={{fontSize:11,color:C.mutedLight,letterSpacing:1}} className="pu">SCANNING...</span>
-              }
-            </div>
-          </div>
-        ),
-      },
+      {icon:"📐",title:"Position your camera",body:"Place your phone or webcam to the side — your full body from head to feet must be visible. Ideal distance: 6–8 feet from the camera.",
+       visual:<div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:24,padding:"12px 0"}}>
+         <div style={{textAlign:"center"}}><div style={{fontSize:32,marginBottom:4}}>📱</div><div style={{fontSize:10,color:C.mutedLight,letterSpacing:1}}>CAMERA</div></div>
+         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}><div style={{height:2,width:80,background:`repeating-linear-gradient(90deg,${C.accent} 0,${C.accent} 6px,transparent 6px,transparent 12px)`}}/><div style={{fontSize:11,color:C.mutedLight}}>6–8 ft</div></div>
+         <div style={{textAlign:"center"}}><div style={{fontSize:32,marginBottom:4}}>🏋️</div><div style={{fontSize:10,color:C.mutedLight,letterSpacing:1}}>YOU</div></div>
+       </div>},
+      {icon:"↔️",title:"Stand side-on to the camera",body:"Face left or right — not toward the camera. Your left or right side should face the lens so MediaPipe can track your knee, hip, and spine angles accurately.",
+       visual:<div style={{display:"flex",justifyContent:"center",gap:32,padding:"12px 0"}}>
+         {[{label:"✅ CORRECT",sub:"Side view",ok:true,e:"🚶"},{label:"❌ WRONG",sub:"Facing camera",ok:false,e:"🧍"}].map(({label,sub,ok,e})=>(
+           <div key={label} style={{textAlign:"center"}}>
+             <div style={{width:60,height:80,borderRadius:8,marginBottom:6,background:ok?C.accent+"18":C.danger+"18",border:`1.5px solid ${ok?C.accent:C.danger}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>{e}</div>
+             <div style={{fontSize:10,fontWeight:700,color:ok?C.accent:C.danger}}>{label}</div>
+             <div style={{fontSize:10,color:C.mutedLight}}>{sub}</div>
+           </div>
+         ))}
+       </div>},
+      {icon:"💡",title:"Lighting & background",body:"Good lighting helps the AI track you accurately. Stand against a plain background if possible and avoid bright lights directly behind you.",
+       visual:<div style={{display:"flex",justifyContent:"center",gap:20,padding:"12px 0"}}>
+         {[{e:"☀️",l:"Natural light",ok:true},{e:"🌑",l:"Dark room",ok:false},{e:"🔦",l:"Backlight",ok:false}].map(({e,l,ok})=>(
+           <div key={l} style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>{e}</div><div style={{fontSize:10,color:ok?C.accent:C.danger,fontWeight:600}}>{ok?"✓":"✗"}</div><div style={{fontSize:10,color:C.mutedLight}}>{l}</div></div>
+         ))}
+       </div>},
+      {icon:"🤖",title:"Confirm pose tracking",
+       body:poseDetected?"✅ Pose tracking is active — your skeleton is visible. You're ready to squat!":"Stand in frame now. The AI is loading and will detect your pose automatically. Wait for the green confirmation.",
+       visual:(
+         <div style={{position:"relative",borderRadius:10,overflow:"hidden",background:"#000",height:160}}>
+           <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+           <canvas ref={canvasRef} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}/>
+           <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",background:poseDetected?"#00E67622":"#00000088",border:`1.5px solid ${poseDetected?C.accent:C.border}`,borderRadius:8,padding:"5px 14px",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:7}}>
+             {poseDetected?<><div style={{width:7,height:7,borderRadius:"50%",background:C.accent}}/><span style={{fontSize:11,color:C.accent,fontWeight:700,letterSpacing:1}}>POSE DETECTED</span></>
+               :<span style={{fontSize:11,color:C.mutedLight,letterSpacing:1}} className="pu">SCANNING...</span>}
+           </div>
+         </div>
+       )},
     ];
-
     const step=CAL_STEPS[calStep];
     const isLast=calStep===CAL_STEPS.length-1;
-    const canProceed=!isLast||(isLast&&poseDetected);
-
-    // Start camera + pose on step 3
-    if(calStep===3&&!camReady){
-      startCamera(facingMode);
-      loadPose();
-    }
-
+    if(calStep===3&&!camReady){startCamera(facingMode);loadPose();}
     return(
       <div style={{...page,padding:"24px 20px 32px"}}>
         <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}.pu{animation:pulse 1.8s ease-in-out infinite}`}</style>
         <div style={{maxWidth:500,margin:"0 auto"}}>
-
-          {/* Header */}
           <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:24}}>
-            <button onClick={()=>{stopCamera();setCalStep(0);setPoseDetected(false);setScreen("setup");}}
-              style={{background:C.s2,border:`1px solid ${C.border}`,color:C.text,borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13}}>
-              ← Back
-            </button>
+            <button onClick={()=>{stopCamera();setCalStep(0);setPoseDetected(false);setScreen("setup");}} style={{background:C.s2,border:`1px solid ${C.border}`,color:C.text,borderRadius:8,padding:"7px 12px",cursor:"pointer",fontSize:13,fontFamily:font}}>← Back</button>
             <div style={{flex:1}}>
               <div style={{...lbl,marginBottom:4}}>Camera Setup · Step {calStep+1} of {CAL_STEPS.length}</div>
               <div style={{height:3,background:C.s2,borderRadius:2,overflow:"hidden"}}>
@@ -1122,56 +866,24 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
               </div>
             </div>
           </div>
-
-          {/* Step dots */}
           <div style={{display:"flex",gap:8,marginBottom:24,justifyContent:"center"}}>
-            {CAL_STEPS.map((_,i)=>(
-              <div key={i} style={{width:i===calStep?24:8,height:8,borderRadius:4,background:i<=calStep?C.accent:C.s2,transition:"all .3s ease"}}/>
-            ))}
+            {CAL_STEPS.map((_,i)=>(<div key={i} style={{width:i===calStep?24:8,height:8,borderRadius:4,background:i<=calStep?C.accent:C.s2,transition:"all .3s ease"}}/>))}
           </div>
-
-          {/* Step card */}
           <div style={{...card(false),marginBottom:18}}>
             <div style={{fontSize:32,textAlign:"center",marginBottom:10}}>{step.icon}</div>
             <div style={{fontSize:18,fontWeight:700,color:C.text,textAlign:"center",marginBottom:10}}>{step.title}</div>
             <div style={{fontSize:13,color:C.mutedLight,lineHeight:1.7,textAlign:"center",marginBottom:16}}>{step.body}</div>
-            {step.visual&&(
-              <div style={{background:C.s2,borderRadius:8,padding:12,marginTop:8}}>{step.visual}</div>
-            )}
+            {step.visual&&<div style={{background:C.s2,borderRadius:8,padding:12,marginTop:8}}>{step.visual}</div>}
           </div>
-
-          {/* Skip pose check note on step 3 */}
           {isLast&&!poseDetected&&(
             <div style={{...card(false),marginBottom:14,background:C.warn+"12",border:`1px solid ${C.warn}30`}}>
-              <div style={{fontSize:12,color:C.warn,lineHeight:1.6}}>
-                ⚠️ Pose not detected yet. You can still continue — tap counting works as fallback. For best results, make sure you're visible in frame.
-              </div>
+              <div style={{fontSize:12,color:C.warn,lineHeight:1.6}}>⚠️ Pose not detected yet. You can still continue — tap counting works as fallback.</div>
             </div>
           )}
-
-          {/* Nav buttons */}
           <div style={{display:"flex",gap:10}}>
-            {calStep>0&&(
-              <button onClick={()=>setCalStep(c=>c-1)} style={{
-                flex:1,padding:"15px",background:C.s2,color:C.text,
-                border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",
-                fontWeight:700,fontSize:14,letterSpacing:1}}>
-                ← Previous
-              </button>
-            )}
-            <button
-              onClick={()=>{
-                if(isLast){setCalibrated(true);setScreen("workout");}
-                else setCalStep(c=>c+1);
-              }}
-              style={{
-                flex:2,padding:"15px",
-                background:canProceed?C.accent:C.s3,
-                color:canProceed?"#000":C.muted,
-                border:"none",borderRadius:10,cursor:"pointer",
-                fontWeight:800,fontSize:14,letterSpacing:2,textTransform:"uppercase",
-                transition:"all .2s",
-              }}>
+            {calStep>0&&(<button onClick={()=>setCalStep(c=>c-1)} style={{flex:1,padding:"15px",background:C.s2,color:C.text,border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:14,fontFamily:font}}>← Previous</button>)}
+            <button onClick={()=>{if(isLast){setCalibrated(true);setScreen("workout");}else setCalStep(c=>c+1);}}
+              style={{flex:2,padding:"15px",background:C.accent,color:"#000",border:"none",borderRadius:10,cursor:"pointer",fontWeight:800,fontSize:14,letterSpacing:2,textTransform:"uppercase",fontFamily:font}}>
               {isLast?(poseDetected?"Start Session →":"Skip & Start →"):"Next →"}
             </button>
           </div>
@@ -1180,26 +892,20 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     );
   }
 
-  // ════════════════════════════════════════════════════════════
-  // WORKOUT
-  // ════════════════════════════════════════════════════════════
+  // ── WORKOUT ──────────────────────────────────────────────────
   if(screen==="workout"){
     const pct=(reps/REPS)*100;
     const poseActive=camMode==="single"&&poseStatus==="ready";
     const poseLoading=poseStatus==="loading";
-
     const poseBadge=()=>{
       if(camMode!=="single")return null;
       const cfg={idle:{label:"INITIALISING",color:C.muted,bg:C.s2},loading:{label:"LOADING POSE AI...",color:C.warn,bg:C.warn+"18"},ready:{label:"POSE TRACKING LIVE",color:C.accent,bg:C.accent+"18"},error:{label:"POSE UNAVAILABLE",color:C.danger,bg:C.danger+"18"}}[poseStatus]||{};
-      return(
-        <div style={{display:"flex",alignItems:"center",gap:6,background:cfg.bg,padding:"5px 12px",borderRadius:6,border:`1px solid ${cfg.color}30`}}>
-          {poseStatus==="ready"&&<div style={{width:6,height:6,borderRadius:"50%",background:C.accent}} className="pu"/>}
-          {poseStatus==="loading"&&<div style={{fontSize:11}} className="pu">⟳</div>}
-          <span style={{fontSize:9,color:cfg.color,letterSpacing:2,fontWeight:700}}>{cfg.label}</span>
-        </div>
-      );
+      return(<div style={{display:"flex",alignItems:"center",gap:6,background:cfg.bg,padding:"5px 12px",borderRadius:6,border:`1px solid ${cfg.color}30`}}>
+        {poseStatus==="ready"&&<div style={{width:6,height:6,borderRadius:"50%",background:C.accent}} className="pu"/>}
+        {poseStatus==="loading"&&<div style={{fontSize:11}} className="pu">⟳</div>}
+        <span style={{fontSize:9,color:cfg.color,letterSpacing:2,fontWeight:700}}>{cfg.label}</span>
+      </div>);
     };
-
     const SimFeed=({label:lb,angle})=>(
       <div style={{background:"#030303",position:"relative",overflow:"hidden",aspectRatio:"4/3",display:"flex",alignItems:"center",justifyContent:"center"}}>
         <svg style={{position:"absolute",inset:0,width:"100%",height:"100%",opacity:.07}} preserveAspectRatio="none">
@@ -1220,11 +926,8 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           <circle cx="4" cy="25" r="5" fill="none" stroke={C.accent} strokeWidth="2"/>
           <circle cx="72" cy="25" r="5" fill="none" stroke={C.accent} strokeWidth="2"/>
         </svg>
-        {[{top:7,left:7,bt:true,bl:true},{top:7,right:7,bt:true,br:true},{bottom:7,left:7,bb:true,bl:true},{bottom:7,right:7,bb:true,br:true}]
-          .map(({top,left,right,bottom,bt,br,bb,bl},i)=>(
-          <div key={i} style={{position:"absolute",top,left,right,bottom,width:13,height:13,
-            borderTop:bt?`2px solid ${C.accent}`:"none",borderRight:br?`2px solid ${C.accent}`:"none",
-            borderBottom:bb?`2px solid ${C.accent}`:"none",borderLeft:bl?`2px solid ${C.accent}`:"none"}}/>
+        {[{top:7,left:7,bt:true,bl:true},{top:7,right:7,bt:true,br:true},{bottom:7,left:7,bb:true,bl:true},{bottom:7,right:7,bb:true,br:true}].map(({top,left,right,bottom,bt,br,bb,bl},i)=>(
+          <div key={i} style={{position:"absolute",top,left,right,bottom,width:13,height:13,borderTop:bt?`2px solid ${C.accent}`:"none",borderRight:br?`2px solid ${C.accent}`:"none",borderBottom:bb?`2px solid ${C.accent}`:"none",borderLeft:bl?`2px solid ${C.accent}`:"none"}}/>
         ))}
         <div style={{position:"absolute",bottom:7,left:9,fontSize:9,color:C.accent,letterSpacing:2,fontWeight:700}}>{lb}</div>
         <div style={{position:"absolute",top:8,right:9,display:"flex",alignItems:"center",gap:4}}>
@@ -1234,22 +937,17 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
         {angle&&<div style={{position:"absolute",top:8,left:9,fontSize:9,color:C.mutedLight,letterSpacing:1}}>{angle}</div>}
       </div>
     );
-
     return(
       <div style={{...page}}>
         <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}.pu{animation:pulse 1.8s ease-in-out infinite}`}</style>
-        {/* Co-branded slim banner for invited clients */}
         {clientCtx&&<CoachBrandedBanner ctx={clientCtx}/>}
         {camMode==="single"&&(
           <div style={{position:"relative",background:"#000",width:"100%"}}>
             <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",maxHeight:340,objectFit:"cover",display:"block"}}/>
             <canvas ref={canvasRef} style={{position:"absolute",top:0,left:0,width:"100%",height:"100%",pointerEvents:"none",objectFit:"cover"}}/>
             {poseStatus!=="ready"&&<div style={{position:"absolute",left:0,right:0,height:1,top:`${scan}%`,background:`linear-gradient(90deg,transparent,${C.accent}60,transparent)`,pointerEvents:"none"}}/>}
-            {[{top:10,left:10,bt:true,bl:true},{top:10,right:10,bt:true,br:true},{bottom:10,left:10,bb:true,bl:true},{bottom:10,right:10,bb:true,br:true}]
-              .map(({top,left,right,bottom,bt,br,bb,bl},i)=>(
-              <div key={i} style={{position:"absolute",top,left,right,bottom,width:18,height:18,pointerEvents:"none",
-                borderTop:bt?`2px solid ${C.accent}`:"none",borderRight:br?`2px solid ${C.accent}`:"none",
-                borderBottom:bb?`2px solid ${C.accent}`:"none",borderLeft:bl?`2px solid ${C.accent}`:"none"}}/>
+            {[{top:10,left:10,bt:true,bl:true},{top:10,right:10,bt:true,br:true},{bottom:10,left:10,bb:true,bl:true},{bottom:10,right:10,bb:true,br:true}].map(({top,left,right,bottom,bt,br,bb,bl},i)=>(
+              <div key={i} style={{position:"absolute",top,left,right,bottom,width:18,height:18,pointerEvents:"none",borderTop:bt?`2px solid ${C.accent}`:"none",borderRight:br?`2px solid ${C.accent}`:"none",borderBottom:bb?`2px solid ${C.accent}`:"none",borderLeft:bl?`2px solid ${C.accent}`:"none"}}/>
             ))}
             <div style={{position:"absolute",top:10,left:10,right:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",gap:6,alignItems:"center"}}>
@@ -1259,7 +957,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
                 </div>
                 {poseBadge()}
               </div>
-              <button onClick={flipCamera} title="Flip camera" style={{background:"#000000AA",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:16,color:C.text}}>🔄</button>
+              <button onClick={flipCamera} style={{background:"#000000AA",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:16,color:C.text}}>🔄</button>
             </div>
             {poseActive&&liveAngles&&(
               <div style={{position:"absolute",bottom:10,left:10,background:"#000000BB",border:`1px solid ${C.accent}30`,borderRadius:8,padding:"6px 12px",display:"flex",gap:12}}>
@@ -1282,15 +980,14 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             )}
             {!camReady&&!camError&&(
               <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"#000000CC"}}>
-                <div style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:8}}>📷</div>
-                <div className="pu" style={{fontSize:12,color:C.accent,letterSpacing:2}}>OPENING CAMERA...</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:8}}>📷</div><div className="pu" style={{fontSize:12,color:C.accent,letterSpacing:2}}>OPENING CAMERA...</div></div>
               </div>
             )}
             {camError&&(
               <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#000000EE",padding:20}}>
                 <div style={{fontSize:32,marginBottom:12}}>📷</div>
                 <div style={{fontSize:13,color:C.danger,textAlign:"center",lineHeight:1.6,marginBottom:16}}>{camError}</div>
-                <button onClick={()=>startCamera(facingMode)} style={{padding:"10px 22px",background:C.accent,color:"#000",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer"}}>Retry Camera</button>
+                <button onClick={()=>startCamera(facingMode)} style={{padding:"10px 22px",background:C.accent,color:"#000",border:"none",borderRadius:8,fontWeight:700,cursor:"pointer",fontFamily:font}}>Retry Camera</button>
               </div>
             )}
           </div>
@@ -1302,8 +999,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
               <span style={{fontSize:11,color:C.warn,fontWeight:600}}>Quad 4K HDMI camera feeds activate in multi-cam phase — showing simulation</span>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:1.5,background:"#000"}}>
-              {[{label:"FRONT",angle:"CAM-1·4K"},{label:"BACK",angle:"CAM-2·4K"},{label:"LEFT SIDE",angle:"CAM-3·4K"},{label:"RIGHT SIDE",angle:"CAM-4·4K"}]
-                .map(({label:lb,angle})=><SimFeed key={lb} label={lb} angle={angle}/>)}
+              {[{label:"FRONT",angle:"CAM-1·4K"},{label:"BACK",angle:"CAM-2·4K"},{label:"LEFT SIDE",angle:"CAM-3·4K"},{label:"RIGHT SIDE",angle:"CAM-4·4K"}].map(({label:lb,angle})=><SimFeed key={lb} label={lb} angle={angle}/>)}
             </div>
           </div>
         )}
@@ -1341,7 +1037,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             </div>
           ):(
             <button className="rb" onClick={tapRep} disabled={reps>=REPS}
-              style={{width:"100%",padding:"20px",fontSize:16,fontWeight:800,background:reps>=REPS?C.s2:C.accent,color:reps>=REPS?C.muted:"#000",border:"none",borderRadius:10,cursor:reps>=REPS?"default":"pointer",letterSpacing:2,textTransform:"uppercase",transition:"all .2s"}}>
+              style={{width:"100%",padding:"20px",fontSize:16,fontWeight:800,background:reps>=REPS?C.s2:C.accent,color:reps>=REPS?C.muted:"#000",border:"none",borderRadius:10,cursor:reps>=REPS?"default":"pointer",letterSpacing:2,textTransform:"uppercase",transition:"all .2s",fontFamily:font}}>
               {reps>=REPS?"Set complete — calculating score...":poseLoading?`TAP EACH REP  ·  ${REPS-reps} REMAINING  (pose loading…)`:`TAP EACH REP  ·  ${REPS-reps} REMAINING`}
             </button>
           )}
@@ -1349,13 +1045,12 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             {poseActive?"Position side-on to camera for best accuracy":camMode==="single"?"Pose engine loading — tap to count manually":"Quad 4K auto-detection in multi-cam phase"}
           </div>
         </div>
+        {showPaywall&&<PaywallModal camMode={camMode||"single"} onPaid={()=>setShowPaywall(false)} onClose={()=>setShowPaywall(false)}/>}
       </div>
     );
   }
 
-  // ════════════════════════════════════════════════════════════
-  // ANALYSIS
-  // ════════════════════════════════════════════════════════════
+  // ── ANALYSIS ─────────────────────────────────────────────────
   if(screen==="analysis"){
     const score=metrics?calcScore(metrics):0;
     const restRemaining=REST-restT;
@@ -1368,9 +1063,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           <div style={{textAlign:"center",marginBottom:26,paddingTop:6}}>
             <div style={{...lbl,marginBottom:12}}>Set {historyRef.current.length} · {REPS} reps · {usedPose?"Live Pose":"Simulated"}</div>
             <div style={{fontSize:88,fontWeight:900,letterSpacing:-5,lineHeight:1,color:analyzing?C.muted:mc(score),transition:"color .5s"}}>{analyzing?"—":score}</div>
-            <div style={{fontSize:16,color:analyzing?C.muted:mc(score),fontWeight:700,marginTop:4}}>
-              {analyzing?`Analysing form${".".repeat(dots)}`:`${grade(score)}  ·  ${gLabel(score)}`}
-            </div>
+            <div style={{fontSize:16,color:analyzing?C.muted:mc(score),fontWeight:700,marginTop:4}}>{analyzing?`Analysing form${".".repeat(dots)}`:`${grade(score)}  ·  ${gLabel(score)}`}</div>
             {usedPose&&!analyzing&&(
               <div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:5,background:C.accent+"15",border:`1px solid ${C.accent}30`,borderRadius:20,padding:"3px 12px"}}>
                 <div style={{width:5,height:5,borderRadius:"50%",background:C.accent}}/>
@@ -1383,20 +1076,18 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
               <div style={{...lbl,marginBottom:16}}>Form Analysis {usedPose?"· Real Keypoints":"· Simulation"}</div>
               {METRICS_DEF.map(({key,label:lb,weight})=>{
                 const v=metrics[key];
-                return(
-                  <div key={key} style={{marginBottom:13}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,alignItems:"center"}}>
-                      <span style={{fontSize:13,color:C.text}}>{lb}</span>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:11,color:C.mutedLight}}>×{weight}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:mc(v),minWidth:50,textAlign:"right"}}>{v}/100</span>
-                      </div>
-                    </div>
-                    <div style={{height:4,background:C.s2,borderRadius:2,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${v}%`,background:mc(v),borderRadius:2,transition:"width .9s cubic-bezier(.25,1,.5,1)"}}/>
+                return(<div key={key} style={{marginBottom:13}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:5,alignItems:"center"}}>
+                    <span style={{fontSize:13,color:C.text}}>{lb}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:11,color:C.mutedLight}}>×{weight}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:mc(v),minWidth:50,textAlign:"right"}}>{v}/100</span>
                     </div>
                   </div>
-                );
+                  <div style={{height:4,background:C.s2,borderRadius:2,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${v}%`,background:mc(v),borderRadius:2,transition:"width .9s cubic-bezier(.25,1,.5,1)"}}/>
+                  </div>
+                </div>);
               })}
             </div>
           )}
@@ -1406,9 +1097,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
               <span style={{...lbl,color:C.accent}}>AI Coach · Claude</span>
               {analyzing&&<span style={{fontSize:11,color:C.mutedLight,marginLeft:4}}>thinking{".".repeat(dots)}</span>}
             </div>
-            <p style={{margin:0,fontSize:14,lineHeight:1.75,color:analyzing?C.muted:"#DDDDDD"}}>
-              {analyzing?"Analysing your squat mechanics across all 10 reps...":feedback}
-            </p>
+            <p style={{margin:0,fontSize:14,lineHeight:1.75,color:analyzing?C.muted:"#DDDDDD"}}>{analyzing?"Analysing your squat mechanics across all 10 reps...":feedback}</p>
           </div>
           {resting&&(
             <div style={{...card(false),marginBottom:14,display:"flex",alignItems:"center",gap:16}}>
@@ -1420,9 +1109,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
                 <div style={{height:4,background:C.s2,borderRadius:2,overflow:"hidden"}}>
                   <div style={{height:"100%",width:`${restPct}%`,background:restRemaining<20?C.warn:C.accent,transition:"width 1s linear",borderRadius:2}}/>
                 </div>
-                <div style={{fontSize:11,color:C.mutedLight,marginTop:6}}>
-                  {restRemaining>0?"Tap below to start next set early":"Rest complete — ready"}
-                </div>
+                <div style={{fontSize:11,color:C.mutedLight,marginTop:6}}>{restRemaining>0?"Tap below to start next set early":"Rest complete — ready"}</div>
               </div>
             </div>
           )}
@@ -1443,7 +1130,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             </div>
           )}
           {!analyzing&&(
-            <button onClick={nextSet} style={{width:"100%",padding:"18px",fontSize:15,fontWeight:800,background:C.accent,color:"#000",border:"none",borderRadius:10,cursor:"pointer",letterSpacing:2,textTransform:"uppercase"}}>
+            <button onClick={nextSet} style={{width:"100%",padding:"18px",fontSize:15,fontWeight:800,background:C.accent,color:"#000",border:"none",borderRadius:10,cursor:"pointer",letterSpacing:2,textTransform:"uppercase",fontFamily:font}}>
               {curSet>=totalSets?"View Session Results →":`Start Set ${curSet+1} / ${totalSets} →`}
             </button>
           )}
@@ -1452,10 +1139,8 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     );
   }
 
-  // ════════════════════════════════════════════════════════════
-  // RESULTS
-  // ════════════════════════════════════════════════════════════
-  const fs=finalScore??0, gc=mc(fs);
+  // ── RESULTS ──────────────────────────────────────────────────
+  const fs=finalScore??0,gc=mc(fs);
   const avgM=METRICS_DEF.map(({key,label:lb})=>({key,label:lb,avg:history.length?Math.round(history.reduce((s,e)=>s+e.metrics[key],0)/history.length):0}));
   const mostImp=avgM.reduce((a,b)=>{
     const aG=history.length>=2?history[history.length-1].metrics[a.key]-history[0].metrics[a.key]:0;
@@ -1463,32 +1148,18 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     return bG>aG?b:a;
   });
   const poseCount=history.filter(h=>h.usedPose).length;
-
   return(
     <div style={{...page,padding:"24px 20px 36px"}}>
       <div style={{maxWidth:560,margin:"0 auto"}}>
-
-        {/* Results hero: logo LEFT (no box, rectangle ratio) · score RIGHT */}
-        <div style={{display:"flex",alignItems:"center",gap:20,padding:"18px 0 22px",
-          borderBottom:`1px solid ${C.border}`,marginBottom:20}}>
-          {/* Logo — no box, no bg, natural 2661:1024 rectangle ratio */}
-          <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
-            style={{
-              width:"auto", height:62,
-              objectFit:"contain", flexShrink:0,
-              display:"block",
-            }}/>
-          {/* Score — right side, takes remaining space */}
+        <div style={{display:"flex",alignItems:"center",gap:18,padding:"18px 0 22px",borderBottom:`1px solid ${C.border}`,marginBottom:20}}>
+          <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:"auto",width:"45%",objectFit:"contain",flexShrink:0}}/>
           <div style={{flex:1,minWidth:0}}>
             <div style={{...lbl,marginBottom:6}}>Session Complete</div>
             <div style={{fontSize:68,fontWeight:900,letterSpacing:-4,color:gc,lineHeight:1}}>{fs}</div>
             <div style={{fontSize:17,color:gc,fontWeight:700,marginTop:4}}>{grade(fs)}&nbsp;&nbsp;·&nbsp;&nbsp;{gLabel(fs)}</div>
-            <div style={{color:C.mutedLight,marginTop:5,fontSize:12}}>
-              {totalSets} sets · {totalSets*REPS} reps{poseCount>0&&` · ${poseCount}/${totalSets} pose`}
-            </div>
+            <div style={{color:C.mutedLight,marginTop:5,fontSize:12}}>{totalSets} sets · {totalSets*REPS} reps{poseCount>0&&` · ${poseCount}/${totalSets} pose`}</div>
           </div>
         </div>
-
         <div style={{...card(false),marginBottom:14}}>
           <div style={{...lbl,marginBottom:16}}>Set-by-Set Results</div>
           {history.map(({setNumber:sn,score:sc,usedPose:up})=>(
@@ -1512,15 +1183,12 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             </div>
           ))}
         </div>
-
         <div style={{...card(false),marginBottom:14}}>
           <div style={{...lbl,marginBottom:14}}>Session Averages</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             {avgM.map(({key,label:lb,avg:av})=>(
               <div key={key} style={{background:C.s2,borderRadius:8,padding:"12px 14px",position:"relative"}}>
-                {key===mostImp.key&&history.length>=2&&(
-                  <div style={{position:"absolute",top:8,right:8,fontSize:9,color:C.accent,background:C.accent+"18",padding:"1px 6px",borderRadius:4,fontWeight:700,letterSpacing:1}}>+MOST</div>
-                )}
+                {key===mostImp.key&&history.length>=2&&<div style={{position:"absolute",top:8,right:8,fontSize:9,color:C.accent,background:C.accent+"18",padding:"1px 6px",borderRadius:4,fontWeight:700,letterSpacing:1}}>+MOST</div>}
                 <div style={{fontSize:11,color:C.mutedLight,marginBottom:5}}>{lb}</div>
                 <div style={{fontSize:26,fontWeight:900,color:mc(av),lineHeight:1}}>{av}</div>
                 <div style={{height:2,background:C.s3,borderRadius:1,marginTop:8,overflow:"hidden"}}>
@@ -1530,8 +1198,6 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             ))}
           </div>
         </div>
-
-        {/* Share CTA */}
         <div style={{...card(true),marginBottom:14,background:"#071510"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
             <div style={{fontSize:20}}>📊</div>
@@ -1540,7 +1206,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
               <div style={{fontSize:12,color:C.mutedLight,marginTop:2}}>Invite friends to try FormIQ — includes your score, metrics & site link</div>
             </div>
           </div>
-          <button onClick={()=>handleShare(fs,historyRef.current,totalSets)} style={{width:"100%",padding:"14px",background:C.accent,color:"#000",border:"none",borderRadius:8,fontWeight:800,cursor:"pointer",fontSize:14,letterSpacing:2,textTransform:"uppercase"}}>
+          <button onClick={()=>handleShare(fs,historyRef.current,totalSets)} style={{width:"100%",padding:"14px",background:C.accent,color:"#000",border:"none",borderRadius:8,fontWeight:800,cursor:"pointer",fontSize:14,letterSpacing:2,textTransform:"uppercase",fontFamily:font}}>
             📤 Generate & Share Report
           </button>
           {screenName&&(
@@ -1550,7 +1216,6 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             </div>
           )}
         </div>
-
         <div style={{...card(false),marginBottom:20,background:C.s2}}>
           <div style={{...lbl,marginBottom:10}}>Multi-Cam Phase — Coming Next</div>
           {["Quad 4K HDMI camera input via capture card","360° pose tracking — front, back, left, right","Knee cave detection from front camera","Bar path tracking overlay on back camera","Rep-by-rep heatmap and long-term analytics"].map((item,i)=>(
@@ -1560,168 +1225,128 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             </div>
           ))}
         </div>
-
-        <button onClick={restart} style={{width:"100%",padding:"17px",fontSize:14,fontWeight:800,background:C.accent,color:"#000",border:"none",borderRadius:10,cursor:"pointer",letterSpacing:2,textTransform:"uppercase"}}>
+        <button onClick={restart} style={{width:"100%",padding:"17px",fontSize:14,fontWeight:800,background:C.accent,color:"#000",border:"none",borderRadius:10,cursor:"pointer",letterSpacing:2,textTransform:"uppercase",fontFamily:font}}>
           New Session
         </button>
       </div>
-
       {showNameModal&&<ScreenNameModal value={screenName} onSave={onNameSave}/>}
       {shareCanvas&&<ShareModal canvas={shareCanvas} onClose={()=>setShareCanvas(null)}/>}
     </div>
   );
 }
 
-
-// ── Home screen ───────────────────────────────────────────────────────────
+// ── Home screen ───────────────────────────────────────────────
 function Home({ onSelect }) {
-  const [logoImg, setLogoImg] = useState(null);
-  useEffect(()=>{
-    const img=new Image();
-    img.onload=()=>setLogoImg(img);
-    img.src=`${process.env.PUBLIC_URL}/formIQ.png`;
-  },[]);
-
   const font="system-ui,-apple-system,'Segoe UI',sans-serif";
-  return (
-    <div style={{
-      background:"#080808", color:"#F0F0F0", minHeight:"100vh",
-      fontFamily:font, display:"flex", flexDirection:"column",
-      alignItems:"center", justifyContent:"center", padding:"32px 20px",
-    }}>
+  const usage = getSessionUsage();
+  return(
+    <div style={{background:"#080808",color:"#F0F0F0",minHeight:"100vh",fontFamily:font,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 20px"}}>
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
         .h-btn:hover{transform:translateY(-2px);transition:all .2s}
         .h-btn:active{transform:scale(.98)}
       `}</style>
-
-      {/* Logo */}
-      <div style={{animation:"fadeUp .5s ease forwards",textAlign:"center",marginBottom:48}}>
-        <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
-          style={{height:120,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 20px"}}/>
-        <div style={{fontSize:15,color:"#777",letterSpacing:1}}>
-          Choose your destination
-        </div>
+      <div style={{animation:"fadeUp .5s ease forwards",textAlign:"center",marginBottom:44}}>
+        <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 16px"}}/>
+        <div style={{fontSize:15,color:"#555",letterSpacing:1}}>Choose your destination</div>
       </div>
-
-      {/* Two buttons */}
-      <div style={{
-        display:"grid", gridTemplateColumns:"1fr 1fr", gap:16,
-        maxWidth:540, width:"100%",
-        animation:"fadeUp .5s .12s ease both",
-      }}>
-        {/* AI Squat Coach */}
-        <button className="h-btn" onClick={()=>onSelect("squat")} style={{
-          background:"#0E1204", border:"1px solid #00E67640",
-          borderRadius:16, padding:"28px 20px", cursor:"pointer",
-          textAlign:"center", display:"flex", flexDirection:"column",
-          alignItems:"center", gap:12, color:"#F0F0F0",
-          fontFamily:font, transition:"all .2s",
-        }}>
-          <div style={{
-            width:56, height:56, borderRadius:14,
-            background:"#00E67620", border:"1px solid #00E67650",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:28,
-          }}>🏋️</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:540,width:"100%",animation:"fadeUp .5s .12s ease both"}}>
+        <button className="h-btn" onClick={()=>onSelect("squat")} style={{background:"#0E1204",border:"1px solid #00E67640",borderRadius:16,padding:"28px 20px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12,color:"#F0F0F0",fontFamily:font,transition:"all .2s"}}>
+          <div style={{width:56,height:56,borderRadius:14,background:"#00E67620",border:"1px solid #00E67650",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>🏋️</div>
           <div>
-            <div style={{fontSize:16, fontWeight:800, color:"#00E676", marginBottom:6}}>
-              AI Squat Coach
-            </div>
-            <div style={{fontSize:12, color:"#777", lineHeight:1.6}}>
-              Live pose tracking<br/>Real-time form scoring<br/>AI coaching after every set
-            </div>
+            <div style={{fontSize:16,fontWeight:800,color:"#00E676",marginBottom:6}}>AI Squat Coach</div>
+            <div style={{fontSize:12,color:"#777",lineHeight:1.6}}>Live pose tracking<br/>Real-time form scoring<br/>AI coaching every set</div>
           </div>
-          <div style={{
-            marginTop:4, fontSize:10, letterSpacing:2.5,
-            color:"#00E676", background:"#00E67618",
-            padding:"4px 12px", borderRadius:20, fontWeight:700,
-            border:"1px solid #00E67630",
-          }}>OPEN APP →</div>
+          <div style={{fontSize:10,letterSpacing:2,color:"#00E676",background:"#00E67618",padding:"4px 12px",borderRadius:20,fontWeight:700,border:"1px solid #00E67630"}}>
+            {usage.paid?"UNLIMITED":"100 FREE SESSIONS"} →
+          </div>
         </button>
-
-        {/* Trainer Dashboard */}
-        <button className="h-btn" onClick={()=>onSelect("trainer")} style={{
-          background:"#0A0C12", border:"1px solid #3D8EF040",
-          borderRadius:16, padding:"28px 20px", cursor:"pointer",
-          textAlign:"center", display:"flex", flexDirection:"column",
-          alignItems:"center", gap:12, color:"#F0F0F0",
-          fontFamily:font, transition:"all .2s",
-        }}>
-          <div style={{
-            width:56, height:56, borderRadius:14,
-            background:"#3D8EF020", border:"1px solid #3D8EF050",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:28,
-          }}>📊</div>
+        <button className="h-btn" onClick={()=>onSelect("trainer")} style={{background:"#0A0C12",border:"1px solid #3D8EF040",borderRadius:16,padding:"28px 20px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12,color:"#F0F0F0",fontFamily:font,transition:"all .2s"}}>
+          <div style={{width:56,height:56,borderRadius:14,background:"#3D8EF020",border:"1px solid #3D8EF050",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>📊</div>
           <div>
-            <div style={{fontSize:16, fontWeight:800, color:"#3D8EF0", marginBottom:6}}>
-              Trainer Dashboard
-            </div>
-            <div style={{fontSize:12, color:"#777", lineHeight:1.6}}>
-              Manage clients &amp; sessions<br/>Analytics &amp; leaderboards<br/>Schedule &amp; roster
-            </div>
+            <div style={{fontSize:16,fontWeight:800,color:"#3D8EF0",marginBottom:6}}>Trainer Dashboard</div>
+            <div style={{fontSize:12,color:"#777",lineHeight:1.6}}>Manage clients<br/>Analytics & sessions<br/>Send invite links</div>
           </div>
-          <div style={{
-            marginTop:4, fontSize:10, letterSpacing:2.5,
-            color:"#3D8EF0", background:"#3D8EF018",
-            padding:"4px 12px", borderRadius:20, fontWeight:700,
-            border:"1px solid #3D8EF030",
-          }}>OPEN DASHBOARD →</div>
+          <div style={{fontSize:10,letterSpacing:2,color:"#3D8EF0",background:"#3D8EF018",padding:"4px 12px",borderRadius:20,fontWeight:700,border:"1px solid #3D8EF030"}}>OPEN DASHBOARD →</div>
         </button>
       </div>
-
-      {/* Footer */}
-      <div style={{
-        marginTop:48, fontSize:11, color:"#333",
-        animation:"fadeUp .5s .24s ease both",
-        textAlign:"center", lineHeight:1.8,
-      }}>
-        formiqapp.space · AI Squat Form Tracking<br/>
-        Phase 2 · Live Pose · Multi-cam coming soon
+      <div style={{marginTop:40,fontSize:11,color:"#2A2A2A",animation:"fadeUp .5s .24s ease both",textAlign:"center",lineHeight:1.8}}>
+        {SITE} · AI Squat Form Tracking · Phase 2
       </div>
     </div>
   );
 }
 
-// ── Router (default export) ───────────────────────────────────────────────
+// ── Trainer Login Modal ───────────────────────────────────────
+function TrainerLogin({ onLogin, onRegister }) {
+  const [email,setEmail]=useState("");
+  const [pass,setPass]=useState("");
+  const [err,setErr]=useState("");
+  const font="system-ui,-apple-system,sans-serif";
+  const attempt=()=>{
+    const t=getTrainer();
+    if(t&&t.email===email){onLogin(t);return;}
+    setErr("Account not found. Please check your email or register.");
+  };
+  return(
+    <div style={{position:"fixed",inset:0,background:"#000000EE",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:font}}>
+      <div style={{background:"#0E1014",border:"1px solid #23262D",borderRadius:16,width:"100%",maxWidth:380,padding:"28px 24px"}}>
+        <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:36,width:"auto",display:"block",margin:"0 auto 20px"}}/>
+        <div style={{fontSize:16,fontWeight:700,color:"#F0F2F5",textAlign:"center",marginBottom:20}}>Trainer Login</div>
+        {err&&<div style={{background:"#FF475718",border:"1px solid #FF475740",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#FF9999",marginBottom:14}}>{err}</div>}
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:"#6B7280",marginBottom:5}}>Email</div>
+          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@email.com"
+            style={{width:"100%",padding:"11px 14px",background:"#141619",border:"1px solid #23262D",borderRadius:8,color:"#F0F2F5",fontSize:14,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
+        </div>
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,color:"#6B7280",marginBottom:5}}>Password</div>
+          <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••"
+            onKeyDown={e=>e.key==="Enter"&&attempt()}
+            style={{width:"100%",padding:"11px 14px",background:"#141619",border:"1px solid #23262D",borderRadius:8,color:"#F0F2F5",fontSize:14,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
+        </div>
+        <button onClick={attempt} style={{width:"100%",padding:"13px",background:"#00E676",color:"#000",border:"none",borderRadius:8,fontWeight:800,fontSize:14,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",fontFamily:font,marginBottom:12}}>
+          Login →
+        </button>
+        <div style={{textAlign:"center",fontSize:12,color:"#6B7280"}}>
+          No account?{" "}
+          <span onClick={onRegister} style={{color:"#00E676",cursor:"pointer",fontWeight:600}}>Register as a trainer</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Router ────────────────────────────────────────────────────
 export default function App() {
-  const [view, setView]         = useState("loading");
-  const [inviteCtx, setInviteCtx] = useState(null);
+  const [view,setView]         = useState("loading");
+  const [inviteCtx,setInviteCtx] = useState(null);
+  const [trainerData,setTrainerData] = useState(null);
+  const [showLogin,setShowLogin] = useState(false);
 
   useEffect(()=>{
-    // 1. Check URL for invite hash: #/c/TRAINERSLUG/TOKEN
     const parsed = parseInviteHash(window.location.hash);
-    if (parsed) {
-      setView("invite");
-      return;
-    }
-    // 2. Check if this device already accepted an invite (returning client)
-    const saved = getClientContext();
-    if (saved) {
-      setInviteCtx(saved);
-      setView("squat"); // returning invited client goes straight to squat coach
-      return;
-    }
-    // 3. Normal home
+    if(parsed){ setView("invite"); return; }
+    const savedCtx = getClientCtx();
+    if(savedCtx){ setInviteCtx(savedCtx); setView("squat"); return; }
     setView("home");
   },[]);
 
-  if (view === "loading") return (
+  if(view==="loading") return(
     <div style={{background:"#080808",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:60,width:"auto",opacity:.6}}/>
     </div>
   );
 
-  if (view === "invite") {
-    const parsed = parseInviteHash(window.location.hash);
-    return (
+  if(view==="invite"){
+    const parsed=parseInviteHash(window.location.hash);
+    return(
       <ClientInviteLanding
         trainerSlug={parsed.trainerSlug}
         token={parsed.token}
         onAccept={(ctx)=>{
+          saveClientCtx(ctx);
           setInviteCtx(ctx);
-          // Clear hash so refreshing doesn't re-show landing
           window.history.replaceState(null,"",window.location.pathname);
           setView("squat");
         }}
@@ -1729,12 +1354,36 @@ export default function App() {
     );
   }
 
-  // Invited client: squat coach with no back button (this is their whole app)
-  if (view === "squat" && inviteCtx) {
-    return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
+  if(view==="squat"&&inviteCtx) return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
+  if(view==="squat")   return <FormIQ onBack={()=>setView("home")} clientCtx={null}/>;
+  if(view==="register") return <TrainerRegistration onDone={()=>{const t=getTrainer();setTrainerData(t);setView("trainer");}} onLogin={()=>setView("trainer-login")}/>;
+  if(view==="trainer-login") return(
+    <>
+      <Home onSelect={(v)=>{if(v==="trainer")setShowLogin(true);else setView(v);}}/>
+      {showLogin&&<TrainerLogin onLogin={(t)=>{setTrainerData(t);setShowLogin(false);setView("trainer");}} onRegister={()=>{setShowLogin(false);setView("register");}}/>}
+    </>
+  );
+  if(view==="trainer"){
+    const t = trainerData||getTrainer();
+    if(!t) return(
+      <Home onSelect={(v)=>{
+        if(v==="trainer"){
+          const existing=getTrainer();
+          if(existing){setTrainerData(existing);setView("trainer");}
+          else setView("register");
+        }else setView(v);
+      }}/>
+    );
+    return <TrainerDashboard trainer={t} onBack={()=>setView("home")} onLogout={()=>{setTrainerData(null);setView("home");}}/>;
   }
 
-  if (view === "squat")   return <FormIQ onBack={()=>setView("home")} clientCtx={null}/>;
-  if (view === "trainer") return <TrainerDashboard onBack={()=>setView("home")}/>;
-  return <Home onSelect={setView}/>;
+  return(
+    <Home onSelect={(v)=>{
+      if(v==="trainer"){
+        const existing=getTrainer();
+        if(existing){setTrainerData(existing);setView("trainer");}
+        else setView("register");
+      }else setView(v);
+    }}/>
+  );
 }

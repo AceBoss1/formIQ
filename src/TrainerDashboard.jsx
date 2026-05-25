@@ -1009,6 +1009,8 @@ export default function TrainerDashboard({ onBack }) {
             </div>
           )}
 
+        </div>
+      </div>
 
       {/* Client drawer */}
       {selectedClient&&<ClientDrawer client={selectedClient} onClose={()=>setSelectedClient(null)}/>}
