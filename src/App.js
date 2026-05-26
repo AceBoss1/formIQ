@@ -592,6 +592,18 @@ function FormIQ({ onBack, clientCtx }){
   },[poseStatus,camReady,camMode]);// eslint-disable-line
 
   useEffect(()=>{if(screen==="workout"&&camMode==="single"){startCamera(facingMode);loadPose();}if(screen!=="workout")stopCamera();},[screen,camMode]);// eslint-disable-line
+
+  // Start camera when calibration reaches step 3 (live pose preview)
+  useEffect(()=>{
+    if(screen==="calibrate"&&calStep===3){
+      startCamera(facingMode);
+      loadPose();
+    }
+    if(screen==="calibrate"&&calStep!==3){
+      stopCamera();
+      setCamReady(false);
+    }
+  },[screen,calStep]);// eslint-disable-line
   useEffect(()=>{if(screen!=="workout")return;const t=setInterval(()=>setTipI(i=>(i+1)%TIPS.length),4500);return()=>clearInterval(t);},[screen]);
   useEffect(()=>{const t=setInterval(()=>setScan(s=>(s+1.2)%100),35);return()=>clearInterval(t);},[]);
   useEffect(()=>{if(!analyzing)return;const t=setInterval(()=>setDots(d=>(d+1)%4),450);return()=>clearInterval(t);},[analyzing]);
@@ -852,17 +864,6 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     ];
     const step=CAL_STEPS[calStep];
     const isLast=calStep===CAL_STEPS.length-1;
-
-    // Start camera + pose when reaching step 3
-    useEffect(()=>{
-      if(calStep===3){
-        startCamera(facingMode);
-        loadPose();
-      }
-      return()=>{
-        if(calStep!==3) stopCamera();
-      };
-    },[calStep]); // eslint-disable-line
     return(
       <div style={{...page,padding:"24px 20px 32px"}}>
         <style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}.pu{animation:pulse 1.8s ease-in-out infinite}`}</style>
