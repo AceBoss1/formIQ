@@ -1,7 +1,8 @@
 import TrainerDashboard from "./TrainerDashboard";
 import TrainerRegistration from "./TrainerRegistration";
+import LandingPage from "./LandingPage";
 import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash } from "./CoachBranded";
-import { getClientCtx, saveClientCtx, isTrainerLoggedIn, getTrainer, saveTrainer, getSessionUsage, isSessionAllowed, incrementSession, FREE_LIMITS, sessionsRemaining } from "./db";
+import { getClientCtx, saveClientCtx, getTrainer, getSessionUsage, isSessionAllowed, incrementSession, FREE_LIMITS, sessionsRemaining } from "./db";
 import { SessionBadge, PaywallModal } from "./FreeSessionGate";
 import { useState, useEffect, useRef } from "react";
 
@@ -1246,72 +1247,37 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
   );
 }
 
-// ── Home screen ───────────────────────────────────────────────
-function Home({ onSelect }) {
-  const font="system-ui,-apple-system,'Segoe UI',sans-serif";
-  const usage = getSessionUsage();
-  return(
-    <div style={{background:"#080808",color:"#F0F0F0",minHeight:"100vh",fontFamily:font,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"32px 20px"}}>
-      <style>{`
-        @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-        .h-btn:hover{transform:translateY(-2px);transition:all .2s}
-        .h-btn:active{transform:scale(.98)}
-      `}</style>
-      <div style={{animation:"fadeUp .5s ease forwards",textAlign:"center",marginBottom:44}}>
-        <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 16px"}}/>
-        <div style={{fontSize:15,color:"#555",letterSpacing:1}}>Choose your destination</div>
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,maxWidth:540,width:"100%",animation:"fadeUp .5s .12s ease both"}}>
-        <button className="h-btn" onClick={()=>onSelect("squat")} style={{background:"#0E1204",border:"1px solid #00E67640",borderRadius:16,padding:"28px 20px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12,color:"#F0F0F0",fontFamily:font,transition:"all .2s"}}>
-          <div style={{width:56,height:56,borderRadius:14,background:"#00E67620",border:"1px solid #00E67650",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>🏋️</div>
-          <div>
-            <div style={{fontSize:16,fontWeight:800,color:"#00E676",marginBottom:6}}>AI Squat Coach</div>
-            <div style={{fontSize:12,color:"#777",lineHeight:1.6}}>Live pose tracking<br/>Real-time form scoring<br/>AI coaching every set</div>
-          </div>
-          <div style={{fontSize:10,letterSpacing:2,color:"#00E676",background:"#00E67618",padding:"4px 12px",borderRadius:20,fontWeight:700,border:"1px solid #00E67630"}}>
-            {usage.paid?"UNLIMITED":"100 FREE SESSIONS"} →
-          </div>
-        </button>
-        <button className="h-btn" onClick={()=>onSelect("trainer")} style={{background:"#0A0C12",border:"1px solid #3D8EF040",borderRadius:16,padding:"28px 20px",cursor:"pointer",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:12,color:"#F0F0F0",fontFamily:font,transition:"all .2s"}}>
-          <div style={{width:56,height:56,borderRadius:14,background:"#3D8EF020",border:"1px solid #3D8EF050",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>📊</div>
-          <div>
-            <div style={{fontSize:16,fontWeight:800,color:"#3D8EF0",marginBottom:6}}>Trainer Dashboard</div>
-            <div style={{fontSize:12,color:"#777",lineHeight:1.6}}>Manage clients<br/>Analytics & sessions<br/>Send invite links</div>
-          </div>
-          <div style={{fontSize:10,letterSpacing:2,color:"#3D8EF0",background:"#3D8EF018",padding:"4px 12px",borderRadius:20,fontWeight:700,border:"1px solid #3D8EF030"}}>OPEN DASHBOARD →</div>
-        </button>
-      </div>
-      <div style={{marginTop:40,fontSize:11,color:"#2A2A2A",animation:"fadeUp .5s .24s ease both",textAlign:"center",lineHeight:1.8}}>
-        {SITE} · AI Squat Form Tracking · Phase 2
-      </div>
-    </div>
-  );
-}
-
 // ── Trainer Login Modal ───────────────────────────────────────
-function TrainerLogin({ onLogin, onRegister }) {
+function TrainerLogin({ onLogin, onRegister, onClose }) {
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
   const [err,setErr]=useState("");
   const font="system-ui,-apple-system,sans-serif";
   const attempt=()=>{
     const t=getTrainer();
-    if(t&&t.email===email){onLogin(t);return;}
-    setErr("Account not found. Please check your email or register.");
+    if(!t){ setErr("No trainer account found. Please register first."); return; }
+    if(t.email!==email){ setErr("Email not found."); return; }
+    const pwHash=btoa(encodeURIComponent(pass));
+    if(t._pwHash&&t._pwHash!==pwHash){ setErr("Incorrect password."); return; }
+    // Legacy accounts created before password existed — allow login by email only
+    onLogin(t);
   };
   return(
     <div style={{position:"fixed",inset:0,background:"#000000EE",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20,fontFamily:font}}>
       <div style={{background:"#0E1014",border:"1px solid #23262D",borderRadius:16,width:"100%",maxWidth:380,padding:"28px 24px"}}>
-        <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:36,width:"auto",display:"block",margin:"0 auto 20px"}}/>
-        <div style={{fontSize:16,fontWeight:700,color:"#F0F2F5",textAlign:"center",marginBottom:20}}>Trainer Login</div>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+          <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:32,width:"auto"}}/>
+          {onClose&&<button onClick={onClose} style={{background:"transparent",border:"none",color:"#6B7280",cursor:"pointer",fontSize:20}}>✕</button>}
+        </div>
+        <div style={{fontSize:16,fontWeight:700,color:"#F0F2F5",marginBottom:20}}>Trainer Login</div>
         {err&&<div style={{background:"#FF475718",border:"1px solid #FF475740",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#FF9999",marginBottom:14}}>{err}</div>}
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,color:"#6B7280",marginBottom:5}}>Email</div>
+          <div style={{fontSize:11,color:"#6B7280",marginBottom:5,letterSpacing:1.5,textTransform:"uppercase"}}>Email</div>
           <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@email.com"
             style={{width:"100%",padding:"11px 14px",background:"#141619",border:"1px solid #23262D",borderRadius:8,color:"#F0F2F5",fontSize:14,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
         </div>
         <div style={{marginBottom:20}}>
-          <div style={{fontSize:11,color:"#6B7280",marginBottom:5}}>Password</div>
+          <div style={{fontSize:11,color:"#6B7280",marginBottom:5,letterSpacing:1.5,textTransform:"uppercase"}}>Password</div>
           <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••"
             onKeyDown={e=>e.key==="Enter"&&attempt()}
             style={{width:"100%",padding:"11px 14px",background:"#141619",border:"1px solid #23262D",borderRadius:8,color:"#F0F2F5",fontSize:14,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
@@ -1330,25 +1296,43 @@ function TrainerLogin({ onLogin, onRegister }) {
 
 // ── Router ────────────────────────────────────────────────────
 export default function App() {
-  const [view,setView]         = useState("loading");
+  const [view,setView]           = useState("loading");
   const [inviteCtx,setInviteCtx] = useState(null);
   const [trainerData,setTrainerData] = useState(null);
   const [showLogin,setShowLogin] = useState(false);
 
   useEffect(()=>{
+    // 1. Check URL for invite hash: #/c/TRAINERSLUG/TOKEN
     const parsed = parseInviteHash(window.location.hash);
     if(parsed){ setView("invite"); return; }
+    // 2. Returning invited client
     const savedCtx = getClientCtx();
     if(savedCtx){ setInviteCtx(savedCtx); setView("squat"); return; }
-    setView("home");
+    // 3. Landing page
+    setView("landing");
   },[]);
 
+  const handleSelect = (dest) => {
+    if(dest==="squat")          { setView("squat"); return; }
+    if(dest==="trainer-login")  { setShowLogin(true); return; }
+    if(dest==="register")       { setView("register"); return; }
+    if(dest==="trainer"){
+      const existing=getTrainer();
+      if(existing){ setTrainerData(existing); setView("trainer"); }
+      else setView("register");
+      return;
+    }
+    setView(dest);
+  };
+
+  // Loading splash
   if(view==="loading") return(
     <div style={{background:"#080808",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:60,width:"auto",opacity:.6}}/>
     </div>
   );
 
+  // Invite flow
   if(view==="invite"){
     const parsed=parseInviteHash(window.location.hash);
     return(
@@ -1365,36 +1349,43 @@ export default function App() {
     );
   }
 
-  if(view==="squat"&&inviteCtx) return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
-  if(view==="squat")   return <FormIQ onBack={()=>setView("home")} clientCtx={null}/>;
-  if(view==="register") return <TrainerRegistration onDone={()=>{const t=getTrainer();setTrainerData(t);setView("trainer");}} onLogin={()=>setView("trainer-login")}/>;
-  if(view==="trainer-login") return(
-    <>
-      <Home onSelect={(v)=>{if(v==="trainer")setShowLogin(true);else setView(v);}}/>
-      {showLogin&&<TrainerLogin onLogin={(t)=>{setTrainerData(t);setShowLogin(false);setView("trainer");}} onRegister={()=>{setShowLogin(false);setView("register");}}/>}
-    </>
-  );
+  // Invited client squat app (no back button, this IS their app)
+  if(view==="squat"&&inviteCtx)
+    return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
+
+  // Regular squat app
+  if(view==="squat")
+    return <FormIQ onBack={()=>setView("landing")} clientCtx={null}/>;
+
+  // Trainer registration
+  if(view==="register")
+    return <TrainerRegistration
+      onDone={()=>{ const t=getTrainer(); setTrainerData(t); setView("trainer"); }}
+      onLogin={()=>setShowLogin(true)}
+    />;
+
+  // Trainer dashboard
   if(view==="trainer"){
-    const t = trainerData||getTrainer();
-    if(!t) return(
-      <Home onSelect={(v)=>{
-        if(v==="trainer"){
-          const existing=getTrainer();
-          if(existing){setTrainerData(existing);setView("trainer");}
-          else setView("register");
-        }else setView(v);
-      }}/>
-    );
-    return <TrainerDashboard trainer={t} onBack={()=>setView("home")} onLogout={()=>{setTrainerData(null);setView("home");}}/>;
+    const t=trainerData||getTrainer();
+    if(!t){ setView("register"); return null; }
+    return <TrainerDashboard
+      trainer={t}
+      onBack={()=>setView("landing")}
+      onLogout={()=>{ setTrainerData(null); setView("landing"); }}
+    />;
   }
 
+  // Landing page (default)
   return(
-    <Home onSelect={(v)=>{
-      if(v==="trainer"){
-        const existing=getTrainer();
-        if(existing){setTrainerData(existing);setView("trainer");}
-        else setView("register");
-      }else setView(v);
-    }}/>
+    <>
+      <LandingPage onGetStarted={handleSelect}/>
+      {showLogin&&(
+        <TrainerLogin
+          onLogin={(t)=>{ setTrainerData(t); setShowLogin(false); setView("trainer"); }}
+          onRegister={()=>{ setShowLogin(false); setView("register"); }}
+          onClose={()=>setShowLogin(false)}
+        />
+      )}
+    </>
   );
 }
