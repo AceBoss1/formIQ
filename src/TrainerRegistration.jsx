@@ -37,7 +37,12 @@ function StepDots({ step, total }) {
 export default function TrainerRegistration({ onDone, onLogin }) {
   const [step, setStep]       = useState(0);
   // Registration fields
-  const [form, setForm]       = useState({ name:"", email:"", phone:"", location:"", specialization:"", bio:"", experience:"", website:"" });
+  const [form, setForm]       = useState({
+    name:"", email:"", phone:"", location:"",
+    specialization:"", bio:"", experience:"", website:"",
+    password:"", confirmPassword:"",
+    photoUrl:"",
+  });
   const [formErr, setFormErr] = useState({});
   // Approval state
   const [approvalStatus, setApprovalStatus] = useState("pending"); // pending|approved|rejected
@@ -56,13 +61,15 @@ export default function TrainerRegistration({ onDone, onLogin }) {
   // ── Step 0: Registration form ─────────────────────────────
   const submitReg = () => {
     const errs = {};
-    if (!form.name.trim())           errs.name = "Required";
-    if (!form.email.includes("@"))   errs.email = "Valid email required";
-    if (!form.phone.trim())          errs.phone = "Required";
-    if (!form.location.trim())       errs.location = "Required";
-    if (!form.specialization)        errs.specialization = "Select a specialization";
-    if (form.bio.trim().length < 30) errs.bio = "Tell us a bit more (min 30 chars)";
-    if (Object.keys(errs).length)    { setFormErr(errs); return; }
+    if (!form.name.trim())                      errs.name = "Required";
+    if (!form.email.includes("@"))              errs.email = "Valid email required";
+    if (!form.phone.trim())                     errs.phone = "Required";
+    if (!form.location.trim())                  errs.location = "Required";
+    if (!form.specialization)                   errs.specialization = "Select a specialization";
+    if (form.bio.trim().length < 30)            errs.bio = "Tell us a bit more (min 30 chars)";
+    if (form.password.length < 8)              errs.password = "Minimum 8 characters";
+    if (form.password !== form.confirmPassword) errs.confirmPassword = "Passwords do not match";
+    if (Object.keys(errs).length) { setFormErr(errs); return; }
     setFormErr({});
     savePendingReg({ ...form, submittedAt: new Date().toISOString() });
     setStep(1);
@@ -94,15 +101,19 @@ export default function TrainerRegistration({ onDone, onLogin }) {
     // For demo: simulate 2s processing
     setTimeout(() => {
       const slug = form.name.toLowerCase().replace(/[^a-z0-9]/g,"").slice(0,16) + Date.now().toString(36);
+      // Simple password hash for localStorage (use Supabase Auth in production)
+      const pwHash = btoa(encodeURIComponent(form.password));
       const trainer = {
         slug, name:form.name, email:form.email, phone:form.phone,
         location:form.location, specialization:form.specialization, bio:form.bio,
         experience:form.experience, website:form.website,
-        photo: `${process.env.PUBLIC_URL}/photoadams.jpg`,
+        // Photo: trainer-supplied public URL, fallback to default
+        photo: form.photoUrl.trim() || `${process.env.PUBLIC_URL}/photoadams.jpg`,
         accent:"#00E676", currency, plan:"starter",
         tagline: form.specialization,
         welcome: `Hi! I'm ${form.name}, your personal squat coach. I've set you up with FormIQ so I can track your form between our sessions. Accept this invite to get started!`,
         createdAt: new Date().toISOString(), approved:true,
+        _pwHash: pwHash, // stored for login check
       };
       saveTrainer(trainer);
       saveTrainerPlans(slug, plans);
@@ -156,12 +167,12 @@ export default function TrainerRegistration({ onDone, onLogin }) {
               <div style={{ fontSize:12, color:C.accent, fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:16 }}>Personal Information</div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
                 {[
-                  {k:"name",       label:"Full Name",      ph:"Coach Adams",          type:"text"},
-                  {k:"email",      label:"Email Address",  ph:"you@email.com",        type:"email"},
-                  {k:"phone",      label:"Phone Number",   ph:"+234 800 000 0000",    type:"tel"},
-                  {k:"location",   label:"City / Country", ph:"Lagos, Nigeria",       type:"text"},
-                  {k:"experience", label:"Years Experience",ph:"e.g. 5",             type:"number"},
-                  {k:"website",    label:"Website (optional)",ph:"https://...",       type:"url"},
+                  {k:"name",       label:"Full Name",       ph:"Coach Adams",       type:"text"},
+                  {k:"email",      label:"Email Address",   ph:"you@email.com",     type:"email"},
+                  {k:"phone",      label:"Phone Number",    ph:"+234 800 000 0000", type:"tel"},
+                  {k:"location",   label:"City / Country",  ph:"Lagos, Nigeria",    type:"text"},
+                  {k:"experience", label:"Years Experience",ph:"e.g. 5",            type:"number"},
+                  {k:"website",    label:"Website (optional)",ph:"https://...",     type:"url"},
                 ].map(({k,label,ph,type})=>(
                   <div key={k}>
                     <label style={lbl}>{label}</label>
@@ -170,6 +181,56 @@ export default function TrainerRegistration({ onDone, onLogin }) {
                     {formErr[k]&&<div style={{fontSize:11,color:C.danger,marginTop:4}}>{formErr[k]}</div>}
                   </div>
                 ))}
+              </div>
+
+              {/* Profile photo URL */}
+              <div style={{ marginTop:14 }}>
+                <label style={lbl}>Profile Photo URL</label>
+                <input type="url" placeholder="https://i.imgur.com/yourphoto.jpg" value={form.photoUrl} onChange={e=>fld("photoUrl",e.target.value)}
+                  style={{...inp, borderColor:C.border}}/>
+                <div style={{ fontSize:11, color:C.muted, marginTop:5, lineHeight:1.6 }}>
+                  Upload your photo to{" "}
+                  <a href="https://imgur.com/upload" target="_blank" rel="noreferrer" style={{color:C.accent}}>Imgur</a>
+                  {" "}or{" "}
+                  <a href="https://cloudinary.com" target="_blank" rel="noreferrer" style={{color:C.accent}}>Cloudinary</a>
+                  {" "}(free), then paste the direct image link here. We host nothing on our end.
+                </div>
+                {form.photoUrl&&(
+                  <div style={{ marginTop:10, display:"flex", alignItems:"center", gap:10 }}>
+                    <img src={form.photoUrl} alt="Preview" onError={e=>e.target.style.display="none"}
+                      style={{ width:52, height:52, borderRadius:"50%", objectFit:"cover", objectPosition:"center top", border:`2px solid ${C.accent}` }}/>
+                    <div style={{ fontSize:11, color:C.accent }}>✓ Photo preview</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Password card */}
+            <div style={{ ...card(), marginBottom:16 }}>
+              <div style={{ fontSize:12, color:C.accent, fontWeight:700, letterSpacing:2, textTransform:"uppercase", marginBottom:16 }}>Set Your Password</div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+                <div>
+                  <label style={lbl}>Password</label>
+                  <input type="password" placeholder="Min. 8 characters" value={form.password} onChange={e=>fld("password",e.target.value)}
+                    style={{...inp, borderColor:formErr.password?C.danger:C.border}}/>
+                  {formErr.password&&<div style={{fontSize:11,color:C.danger,marginTop:4}}>{formErr.password}</div>}
+                  {!formErr.password&&form.password.length>0&&(
+                    <div style={{fontSize:11,marginTop:4,color:form.password.length>=8?C.accent:C.warn}}>
+                      {form.password.length>=8?"✓ Strong enough":"Keep going..."}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label style={lbl}>Confirm Password</label>
+                  <input type="password" placeholder="Repeat password" value={form.confirmPassword} onChange={e=>fld("confirmPassword",e.target.value)}
+                    style={{...inp, borderColor:formErr.confirmPassword?C.danger:C.border}}/>
+                  {formErr.confirmPassword&&<div style={{fontSize:11,color:C.danger,marginTop:4}}>{formErr.confirmPassword}</div>}
+                  {!formErr.confirmPassword&&form.confirmPassword.length>0&&(
+                    <div style={{fontSize:11,marginTop:4,color:form.confirmPassword===form.password?C.accent:C.warn}}>
+                      {form.confirmPassword===form.password?"✓ Passwords match":"Does not match"}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
