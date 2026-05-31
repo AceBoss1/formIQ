@@ -146,7 +146,6 @@ const getReferralCode = () => {
   }
   return code;
 };
-const getReferralCount = () => parseInt(localStorage.getItem("fiq_referral_count")||"0");
 const getReferralDiscount = () => parseInt(localStorage.getItem("fiq_referral_discount")||"0");
 
 // ── Report canvas ─────────────────────────────────────────────
