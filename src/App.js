@@ -719,19 +719,32 @@ No lists or headers. Speak directly to the athlete.`}]})});
         clientName: clientCtx?.clientName||screenName||"Anonymous",
         trainerSlug: clientCtx?.trainerSlug||null,
       };
-      // Save to localStorage
+      // Save to localStorage always
       saveSession(sessionEntry);
       setSessionLog(loadSessions());
-      // ── SYNC TO FIREBASE ── if invited client, sync to trainer's Firestore
-      if(clientCtx?.trainerSlug){
+
+      // ── SYNC TO FIREBASE ──────────────────────────────────────
+      // Sync if: (a) invited client with trainerSlug, OR (b) Firebase is ready
+      const trainerSlug = clientCtx?.trainerSlug;
+      if(trainerSlug){
         setSyncing(true);
         try{
-          await ensureAuth();
-          await syncClientSession(clientCtx.trainerSlug, clientCtx.clientName||"Client", sessionEntry);
+          const user = await ensureAuth();
+          if(!user) throw new Error("Auth failed — Firebase env vars may be missing");
+          await syncClientSession(
+            trainerSlug,
+            clientCtx.clientName||"Client",
+            sessionEntry
+          );
           setSyncDone(true);
-          setTimeout(()=>setSyncDone(false),3000);
-        }catch(e){console.warn("Sync failed:",e.message);}
-        setSyncing(false);
+          setTimeout(()=>setSyncDone(false),4000);
+        }catch(e){
+          console.error("❌ Session sync failed:",e.message);
+          // Show user what went wrong
+          setSyncDone(false);
+        }finally{
+          setSyncing(false);
+        }
       }
       setScreen("results");
     }else{

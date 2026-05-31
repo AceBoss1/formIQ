@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { getTrainer, saveTrainer, getClients, addClient, updateClient, getSessions, addSession, getTrainerPlans, saveTrainerPlans, getSchedule, addScheduleItem, updateScheduleItem, DEFAULT_PLANS } from "./db";
 import { InviteManager } from "./CoachBranded";
+import { listenClientSessions, listenClients, syncClientProfile, saveCoachNote, saveWeeklyTarget, isFirebaseReady } from "./firebase";
 
 const T = {
   bg:"#07080A", surface:"#0E1014", s2:"#141619", s3:"#1C1F24",
@@ -254,6 +255,8 @@ function ClientDrawer({client,sessions,plans,trainerSlug,baseUrl,onClose,onRefre
   const [noteSaved,setNoteSaved]=useState(false);
   const saveNote=()=>{
     updateClient(trainerSlug,client.id,{coachNote:note,noteDate:new Date().toISOString()});
+    // Also sync to Firestore so client sees it live
+    saveCoachNote(trainerSlug, String(client.id), note).catch(e=>console.warn("Note sync:",e.message));
     setNoteSaved(true);setTimeout(()=>setNoteSaved(false),2000);
     onRefresh();
   };
@@ -367,14 +370,58 @@ export default function TrainerDashboard({ trainer:initialTrainer, onBack, onLog
   const [plansDirty,setPlansDirty]         = useState(false);
   const [plansSaved,setPlansSaved]         = useState(false);
 
-  // Load all real data on mount
+  // Load all real data on mount + set up real-time Firestore listeners
+  useEffect(()=>{
+    // Always load from localStorage first (instant)
+    setClients(getClients(SLUG));
+    setSessions(getSessions(SLUG));
+    setSchedule(getSchedule(SLUG));
+    setPlans(getTrainerPlans(SLUG));
+
+    // Then layer on real-time Firestore listeners
+    let unsubSessions = ()=>{};
+    let unsubClients  = ()=>{};
+
+    // Real-time session listener — merges Firestore sessions with local ones
+    unsubSessions = listenClientSessions(SLUG, (firestoreSessions)=>{
+      if(firestoreSessions.length > 0){
+        // Merge Firestore sessions with localStorage sessions (dedupe by id)
+        const local = getSessions(SLUG);
+        const localIds = new Set(local.map(s=>String(s.id)));
+        const newOnes  = firestoreSessions.filter(s=>!localIds.has(String(s.firestoreId||s.id)));
+        if(newOnes.length > 0){
+          // Add synced sessions to localStorage and update state
+          newOnes.forEach(s=>{
+            addSession(SLUG, {
+              ...s,
+              id: s.firestoreId || Date.now(),
+              clientId: s.clientId || 0,
+              clientName: s.clientName || "Client",
+            });
+          });
+        }
+        // Always update sessions from the merged store
+        setSessions(getSessions(SLUG));
+      }
+    });
+
+    // Real-time client listener
+    unsubClients = listenClients(SLUG, (firestoreClients)=>{
+      if(firestoreClients.length > 0){
+        setSessions(prev => prev); // trigger re-render
+        setClients(firestoreClients);
+      }
+    });
+
+    return ()=>{ unsubSessions(); unsubClients(); };
+  },[SLUG]); // eslint-disable-line
+
   const refresh = () => {
     setClients(getClients(SLUG));
     setSessions(getSessions(SLUG));
     setSchedule(getSchedule(SLUG));
     setPlans(getTrainerPlans(SLUG));
   };
-  useEffect(()=>{ refresh(); },[SLUG]); // eslint-disable-line
 
   const saveProfile = () => {
     saveTrainer(trainer);
@@ -463,6 +510,11 @@ export default function TrainerDashboard({ trainer:initialTrainer, onBack, onLog
             <div style={{fontSize:12,color:T.muted,marginTop:1}}>{new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
+            {/* Firebase sync status */}
+            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:isFirebaseReady()?T.accent:T.gold}}>
+              <div style={{width:6,height:6,borderRadius:"50%",background:isFirebaseReady()?T.accent:T.gold}}/>
+              {isFirebaseReady()?"Live sync":"Offline — check Firebase config"}
+            </div>
             <div style={{position:"relative"}}>
               <button onClick={()=>setNotifOpen(!notifOpen)} style={{background:T.s2,border:`1px solid ${T.border}`,borderRadius:8,width:36,height:36,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",color:T.mutedL,fontSize:16}}>🔔</button>
               {atRiskClients>0&&<div style={{position:"absolute",top:-3,right:-3,width:16,height:16,borderRadius:"50%",background:T.danger,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:"#fff"}}>{atRiskClients}</div>}
