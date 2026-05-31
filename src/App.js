@@ -4,9 +4,9 @@ import LandingPage from "./LandingPage";
 import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash } from "./CoachBranded";
 import { getClientCtx, saveClientCtx, getTrainer, getSessionUsage, isSessionAllowed, incrementSession, FREE_LIMITS, sessionsRemaining } from "./db";
 import { SessionBadge, PaywallModal } from "./FreeSessionGate";
+import { syncClientSession, fetchCoachNote, fetchWeeklyTarget, ensureAuth, isFirebaseReady } from "./firebase";
 import { useState, useEffect, useRef } from "react";
 
-// ── Palette ───────────────────────────────────────────────────
 const C = {
   bg:"#080808", surface:"#111111", s2:"#1A1A1A", s3:"#222222",
   border:"#272727", accent:"#00E676", warn:"#FFB300", danger:"#FF3D3D",
@@ -34,47 +34,35 @@ const TIPS = [
   "Fill your belly with air before the descent",
   "Screw your feet into the floor for maximum stability",
   "Grip the floor with your toes — create a stable base",
-  "Keep your elbows tucked under the bar",
   "Control the descent — never free-fall into the squat",
   "Drive your traps into the bar on the ascent",
-  "Sit between your hips, not on top of your knees",
-  "Push the floor away instead of thinking 'stand up'",
-  "Maintain tension at the bottom — don't relax in the hole",
-  "Big breath at the top · reset · repeat",
-  "Keep your ribs down — avoid overextending your back",
-  "Lock in your upper back before unracking",
-  "Walk the bar out with minimal steps",
-  "Stay tight from unrack to rerack",
-  "Don't let your knees cave inward on the ascent",
   "Hips and shoulders rise together out of the hole",
   "Use your lats to stabilize the bar path",
-  "Think 'spread the floor apart' with your feet",
   "Depth first — hit parallel with control",
-  "Keep the bar balanced over your center of gravity",
-  "Stay patient in the bottom position",
   "Explode up while maintaining form",
-  "Maintain full-foot contact throughout the rep",
   "Tension before motion — get tight before descending",
-  "Keep your chin neutral — avoid looking too high up",
-  "Breathe and brace before every rep, even lightweight sets",
   "Strong setup equals strong reps",
-  "Reset your stance between reps if needed",
-  "Control your tempo — don't rush the movement",
-  "Train consistency before adding more weight",
   "Quality reps build strength faster than ego lifting",
   "Use your glutes to finish the lockout",
-  "Keep the movement smooth and repeatable",
-  "Stay stacked — ribs over hips throughout the lift",
-  "Foot pressure should stay balanced heel-to-toe",
-  "Own the bottom position with confidence",
-  "Push evenly through both legs",
   "Tight core · stable feet · powerful drive",
   "Every rep should look almost identical",
-  "Think power, not panic, out of the hole",
   "Stability creates strength",
 ];
 
 const SITE = "formiq.name.ng";
+
+// ── Feature gating by plan ────────────────────────────────────
+// plan: "free" | "pro" | "elite"
+const USER_PLAN_KEY = "fiq_user_plan";
+const getUserPlan = () => localStorage.getItem(USER_PLAN_KEY) || "free";
+const setUserPlan = (p) => localStorage.setItem(USER_PLAN_KEY, p);
+
+// AI personality by plan
+const AI_PERSONA = {
+  free:  { name:"Victor",  title:"AI Training Assistant", color:"#00E676" },
+  pro:   { name:"Ruby",    title:"AI Coach",              color:"#3D8EF0" },
+  elite: { name:"Pearl",   title:"AI Fitness Expert",     color:"#F5A623" },
+};
 
 const mc     = (v) => v>=80?C.accent:v>=60?C.warn:C.danger;
 const grade  = (s) => s>=90?"S":s>=82?"A+":s>=75?"A":s>=65?"B":s>=55?"C":"D";
@@ -118,10 +106,14 @@ const mkSimMetrics = (setNum) => {
 
 const calcScore = (m) => Math.round(METRICS_DEF.reduce((s,{key,weight})=>s+m[key]*weight,0));
 
-const fallback = (s,set,total) =>
-  s>=82?`Clean set — mechanics held up well. Sharpen descent tempo to a deliberate 2-count for more power out of the hole. ${set<total?"Stay locked in for the next set.":"Strong session — consistency is building."}`
-  :s>=65?`Form held early but slipped around reps 6–8 as fatigue built. Drive knees out, keep chest from diving. ${set<total?"Full rest then come back with more intention.":"Target that correction next session."}`
-  :`Form broke down — brace harder before every rep and sit back like reaching for a box behind you. ${set<total?"Take the full rest and reset.":"Make this the priority correction next session."}`;
+const fallback = (s,set,total,plan="free") => {
+  const name = AI_PERSONA[plan]?.name || "Victor";
+  return s>=82
+    ?`Clean set — mechanics held up well. Sharpen descent tempo to a deliberate 2-count for more power out of the hole. ${set<total?"Stay locked in for the next set.":"Strong session — consistency is building."}`
+    :s>=65
+    ?`Form held early but slipped around reps 6–8 as fatigue built. Drive knees out, keep chest from diving. ${set<total?"Full rest then come back with more intention.":"Target that correction next session."}`
+    :`Form broke down — brace harder before every rep and sit back like reaching for a box behind you. ${set<total?"Take the full rest and reset.":"Make this the priority correction next session."}`;
+};
 
 const loadScript = (src) => new Promise((res,rej) => {
   if(document.querySelector(`script[src="${src}"]`)){res();return;}
@@ -141,15 +133,35 @@ function roundRect(ctx,x,y,w,h,r){
   ctx.closePath();
 }
 
-// ── Session history ───────────────────────────────────────────
+// ── Session history (localStorage) ───────────────────────────
 const LS_KEY="fiq_sessions";
 const loadSessions=()=>{try{return JSON.parse(localStorage.getItem(LS_KEY)||"[]");}catch{return[];}};
-const saveSession=(entry)=>{try{const p=loadSessions();p.unshift(entry);localStorage.setItem(LS_KEY,JSON.stringify(p.slice(0,50)));}catch{}};
+const saveSession=(entry)=>{try{const p=loadSessions();p.unshift(entry);localStorage.setItem(LS_KEY,JSON.stringify(p.slice(0,100)));}catch{}};
 const clearSessions=()=>{try{localStorage.removeItem(LS_KEY);}catch{}};
 
+// ── Referral helpers ──────────────────────────────────────────
+const getReferralCode = () => {
+  let code = localStorage.getItem("fiq_referral_code");
+  if(!code){
+    code = "FIQ" + Math.random().toString(36).substring(2,8).toUpperCase();
+    localStorage.setItem("fiq_referral_code", code);
+  }
+  return code;
+};
+const getReferralCount = () => parseInt(localStorage.getItem("fiq_referral_count")||"0");
+const incrementReferral = () => {
+  const n = getReferralCount()+1;
+  localStorage.setItem("fiq_referral_count", String(n));
+  // Group discounts: 1 friend = 10%, 3 friends = 20%, 5+ friends = 35%
+  const discount = n>=5?35:n>=3?20:n>=1?10:0;
+  localStorage.setItem("fiq_referral_discount", String(discount));
+  return { count:n, discount };
+};
+const getReferralDiscount = () => parseInt(localStorage.getItem("fiq_referral_discount")||"0");
+
 // ── Report canvas ─────────────────────────────────────────────
-const generateReportCanvas=({screenName,finalScore,history,totalSets,REPS,logoImg,logo512Img})=>{
-  const W=800,H=1260;
+const generateReportCanvas=({screenName,finalScore,history,totalSets,REPS,logoImg,logo512Img,referralCode})=>{
+  const W=800,H=1300;
   const canvas=document.createElement("canvas");
   canvas.width=W;canvas.height=H;
   const ctx=canvas.getContext("2d");
@@ -174,7 +186,7 @@ const generateReportCanvas=({screenName,finalScore,history,totalSets,REPS,logoIm
   ctx.font="bold 10px system-ui";ctx.fillStyle=ACCENT;ctx.textAlign="center";
   ctx.fillText("SESSION REPORT",RX+RW/2,ry+16);ry+=36;
   ctx.font="10px system-ui";ctx.fillStyle="#BBBBBB";ctx.textAlign="left";
-  ctx.fillText("AI SQUAT COACH  ·  PHASE 2",RX,ry);ry+=22;
+  ctx.fillText("AI SQUAT COACH  ·  formiq.name.ng",RX,ry);ry+=22;
   if(screenName){ctx.font="bold 30px system-ui";ctx.fillStyle="#F0F0F0";ctx.textAlign="left";
     ctx.save();ctx.beginPath();ctx.rect(RX,ry-28,RW,36);ctx.clip();
     ctx.fillText(screenName,RX,ry);ctx.restore();ry+=36;}
@@ -227,6 +239,22 @@ const generateReportCanvas=({screenName,finalScore,history,totalSets,REPS,logoIm
     yp+=42;
   });
   yp+=10;
+  // Referral section in report
+  if(referralCode){
+    ctx.strokeStyle="#282828";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(48,yp);ctx.lineTo(W-48,yp);ctx.stroke();yp+=22;
+    roundRect(ctx,32,yp,W-64,80,12);
+    const refGrad=ctx.createLinearGradient(32,yp,W-32,yp+80);
+    refGrad.addColorStop(0,"#0A100A");refGrad.addColorStop(1,"#080808");
+    ctx.fillStyle=refGrad;ctx.fill();ctx.strokeStyle=ACCENT+"40";ctx.lineWidth=1.5;ctx.stroke();
+    ctx.font="bold 11px system-ui";ctx.fillStyle=ACCENT;ctx.textAlign="left";
+    ctx.fillText("🎁  BRING-A-FRIEND — GET UP TO 35% OFF YOUR PLAN",52,yp+24);
+    ctx.font="13px system-ui";ctx.fillStyle="#CCCCCC";
+    ctx.fillText("Share your referral link and earn discounts for every friend who joins FormIQ.",52,yp+46);
+    ctx.font="bold 13px system-ui";ctx.fillStyle=ACCENT;
+    ctx.fillText(`Your code: ${referralCode}  ·  formiq.name.ng/ref/${referralCode}`,52,yp+66);
+    yp+=80+16;
+  }
   ctx.strokeStyle="#282828";ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(48,yp);ctx.lineTo(W-48,yp);ctx.stroke();yp+=22;
   const invH=205;
@@ -267,12 +295,11 @@ const generateReportCanvas=({screenName,finalScore,history,totalSets,REPS,logoIm
   return canvas;
 };
 
-// ── HistoryModal ──────────────────────────────────────────────
+// ── History Modal ─────────────────────────────────────────────
 function HistoryModal({sessions,onClose,onClear}){
   const mc2=(v)=>v>=80?"#00E676":v>=60?"#FFB300":"#FF3D3D";
   const grade2=(s)=>s>=90?"S":s>=82?"A+":s>=75?"A":s>=65?"B":s>=55?"C":"D";
   const fmt=(iso)=>{const d=new Date(iso);return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"})+" · "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});};
-  const METRICS_LABELS={kneeAlignment:"Knee",spineNeutrality:"Spine",squatDepth:"Depth",tempoConsistency:"Tempo",hipHinge:"Hip"};
   const [expanded,setExpanded]=useState(null);
   const best=sessions.length?Math.max(...sessions.map(s=>s.score)):0;
   const avgScore=sessions.length?Math.round(sessions.reduce((s,e)=>s+e.score,0)/sessions.length):0;
@@ -280,15 +307,13 @@ function HistoryModal({sessions,onClose,onClear}){
   return(
     <div style={{position:"fixed",inset:0,background:"#000000E8",zIndex:9999,display:"flex",flexDirection:"column",fontFamily:"system-ui"}}>
       <div style={{background:"#111",borderBottom:"1px solid #222",padding:"16px 20px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-        <div>
-          <div style={{fontSize:16,fontWeight:700,color:"#F0F0F0"}}>Session History</div>
-          <div style={{fontSize:12,color:"#777",marginTop:2}}>{sessions.length} session{sessions.length!==1?"s":""} recorded</div>
-        </div>
+        <div><div style={{fontSize:16,fontWeight:700,color:"#F0F0F0"}}>Session History</div>
+        <div style={{fontSize:12,color:"#777",marginTop:2}}>{sessions.length} session{sessions.length!==1?"s":""} recorded</div></div>
         <button onClick={onClose} style={{background:"#1A1A1A",border:"1px solid #333",color:"#CCC",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✕ Close</button>
       </div>
       {sessions.length>=2&&(
         <div style={{background:"#0D0D0D",padding:"12px 20px",borderBottom:"1px solid #1A1A1A",display:"flex",gap:0,flexShrink:0}}>
-          {[{label:"Sessions",val:sessions.length},{label:"Best Score",val:best,col:mc2(best)},{label:"Average",val:avgScore,col:mc2(avgScore)},{label:"Trend",val:(trend>0?"+":"")+trend,col:trend>0?"#00E676":trend<0?"#FF3D3D":"#777"}].map(({label,val,col})=>(
+          {[{label:"Sessions",val:sessions.length},{label:"Best",val:best,col:mc2(best)},{label:"Average",val:avgScore,col:mc2(avgScore)},{label:"Trend",val:(trend>0?"+":"")+trend,col:trend>0?"#00E676":trend<0?"#FF3D3D":"#777"}].map(({label,val,col})=>(
             <div key={label} style={{flex:1,textAlign:"center",padding:"4px 0",borderRight:"1px solid #1A1A1A"}}>
               <div style={{fontSize:10,color:"#555",letterSpacing:2,textTransform:"uppercase",marginBottom:3}}>{label}</div>
               <div style={{fontSize:20,fontWeight:800,color:col||"#F0F0F0"}}>{val}</div>
@@ -297,42 +322,20 @@ function HistoryModal({sessions,onClose,onClear}){
         </div>
       )}
       <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
-        {sessions.map((s,i)=>(
-          <div key={s.id} style={{background:expanded===i?"#141414":"#111",border:`1px solid ${expanded===i?"#272727":"#1A1A1A"}`,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
+        {sessions.length===0?<div style={{textAlign:"center",padding:"40px",color:"#555"}}>No sessions yet</div>
+        :sessions.map((s,i)=>(
+          <div key={s.id||i} style={{background:expanded===i?"#141414":"#111",border:"1px solid #1A1A1A",borderRadius:10,marginBottom:10,overflow:"hidden"}}>
             <div onClick={()=>setExpanded(expanded===i?null:i)} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 14px",cursor:"pointer"}}>
               <div style={{width:42,height:42,borderRadius:8,background:mc2(s.score)+"18",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <span style={{fontSize:16,fontWeight:900,color:mc2(s.score)}}>{s.score}</span>
               </div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
-                  <span style={{fontSize:13,fontWeight:700,color:"#F0F0F0"}}>{grade2(s.score)} · {s.score}/100</span>
-                  {i===0&&<span style={{fontSize:9,background:"#00E67618",color:"#00E676",padding:"1px 6px",borderRadius:4,fontWeight:700}}>LATEST</span>}
-                  {s.score===best&&sessions.length>1&&<span style={{fontSize:9,background:"#FFB30018",color:"#FFB300",padding:"1px 6px",borderRadius:4,fontWeight:700}}>BEST</span>}
-                </div>
+                <div style={{fontSize:13,fontWeight:700,color:"#F0F0F0"}}>{grade2(s.score)} · {s.score}/100</div>
                 <div style={{fontSize:11,color:"#666"}}>{fmt(s.date)}</div>
-                <div style={{fontSize:11,color:"#555",marginTop:2}}>{s.totalSets} sets · {s.totalReps} reps · {s.camMode==="single"?"Single cam":"Quad sim"}{s.usedPose?" · Pose":""}</div>
+                <div style={{fontSize:11,color:"#555",marginTop:2}}>{s.totalSets} sets · {s.totalReps} reps</div>
               </div>
               <div style={{color:"#444",fontSize:14}}>{expanded===i?"▲":"▼"}</div>
             </div>
-            {expanded===i&&s.avgMetrics&&(
-              <div style={{padding:"0 14px 14px",borderTop:"1px solid #1A1A1A"}}>
-                <div style={{fontSize:10,color:"#555",letterSpacing:2,textTransform:"uppercase",margin:"10px 0 8px"}}>Metric Averages</div>
-                {Object.entries(METRICS_LABELS).map(([key,label])=>{
-                  const v=s.avgMetrics[key]||0;
-                  return(
-                    <div key={key} style={{marginBottom:8}}>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                        <span style={{fontSize:12,color:"#AAAAAA"}}>{label}</span>
-                        <span style={{fontSize:12,fontWeight:700,color:mc2(v)}}>{v}/100</span>
-                      </div>
-                      <div style={{height:3,background:"#1E1E1E",borderRadius:2,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:`${v}%`,background:mc2(v),borderRadius:2}}/>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
           </div>
         ))}
       </div>
@@ -374,7 +377,7 @@ function ScreenNameModal({value,onSave}){
 }
 
 // ── Share Modal ───────────────────────────────────────────────
-function ShareModal({canvas,onClose}){
+function ShareModal({canvas,onClose,referralCode}){
   const [status,setStatus]=useState("idle");
   const [errMsg,setErrMsg]=useState("");
   const previewUrl=canvas.toDataURL("image/png");
@@ -384,7 +387,11 @@ function ShareModal({canvas,onClose}){
     try{
       const blob=await getPngBlob();
       const file=new File([blob],"FormIQ-Session-Report.png",{type:"image/png"});
-      const shareData={title:"My FormIQ Squat Session",text:`Check out my squat form report from FormIQ AI 🏋️ — try it free at https://${SITE}`,files:[file]};
+      const shareData={
+        title:"My FormIQ Squat Session",
+        text:`Check out my squat form report from FormIQ AI 🏋️ — try it free at https://${SITE}${referralCode?`/ref/${referralCode}`:""}`,
+        files:[file]
+      };
       if(navigator.share&&navigator.canShare&&navigator.canShare(shareData)){await navigator.share(shareData);setStatus("done");}
       else if(navigator.share){await navigator.share({title:"FormIQ — AI Squat Coach",text:`I just tracked my squat form with FormIQ AI 🏋️ — try it free at https://${SITE}`,url:`https://${SITE}`});setStatus("done");}
       else{setErrMsg("Your browser doesn't support native sharing. Download the PNG below.");setStatus("error");}
@@ -400,16 +407,51 @@ function ShareModal({canvas,onClose}){
         <div style={{width:36,height:4,background:"#333",borderRadius:2,margin:"0 auto 18px"}}/>
         <div style={{fontSize:15,fontWeight:700,color:"#F0F0F0",marginBottom:3,textAlign:"center"}}>Share Session Report</div>
         <div style={{fontSize:12,color:"#AAAAAA",textAlign:"center",marginBottom:16}}>Your device will open a share sheet — pick any app</div>
-        <div style={{borderRadius:10,overflow:"hidden",marginBottom:18,border:"1px solid #222",background:"#000",maxHeight:320,overflowY:"hidden"}}>
+        {referralCode&&(
+          <div style={{background:"#00E67612",border:"1px solid #00E67630",borderRadius:10,padding:"10px 14px",marginBottom:14}}>
+            <div style={{fontSize:11,color:"#00E676",fontWeight:700,marginBottom:4}}>🎁 Your Bring-A-Friend Link</div>
+            <div style={{fontSize:12,color:"#AAAAAA"}}>Earn up to 35% off when friends join using your link</div>
+            <div style={{fontSize:11,color:"#00E676",marginTop:6,fontFamily:"monospace"}}>formiq.name.ng/ref/{referralCode}</div>
+          </div>
+        )}
+        <div style={{borderRadius:10,overflow:"hidden",marginBottom:18,border:"1px solid #222",background:"#000",maxHeight:300,overflowY:"hidden"}}>
           <img src={previewUrl} alt="Report" style={{width:"100%",display:"block"}}/>
         </div>
         {errMsg&&<div style={{background:"#FF3D3D18",border:"1px solid #FF3D3D40",borderRadius:8,padding:"10px 14px",marginBottom:12,fontSize:12,color:"#FF9999",lineHeight:1.5}}>{errMsg}</div>}
-        {btn("#00E676","#000","none",shareViaSheet,status==="sharing",<><span style={{fontSize:20}}>{status==="sharing"?"⏳":status==="done"?"✅":"📤"}</span><span>{status==="sharing"?"Opening share sheet...":status==="done"?"Shared!":"Share via WhatsApp / Telegram / Any App"}</span></>)}
-        <div style={{background:"#1A1A1A",border:"1px solid #2A2A2A",borderRadius:8,padding:"10px 14px",marginBottom:10}}>
-          <div style={{fontSize:11,color:"#AAAAAA",lineHeight:1.7}}><strong style={{color:"#CCCCCC"}}>How it works:</strong> Tap above to open your device's native share sheet. Select WhatsApp, Telegram, Instagram, or any app. The full report image is attached automatically.</div>
-        </div>
+        {btn("#00E676","#000","none",shareViaSheet,status==="sharing",<><span style={{fontSize:20}}>{status==="sharing"?"⏳":status==="done"?"✅":"📤"}</span><span>{status==="sharing"?"Opening...":status==="done"?"Shared!":"Share via WhatsApp / Telegram / Any App"}</span></>)}
         {btn("#1A1A1A","#CCCCCC","1px solid #333",downloadPng,false,<><span style={{fontSize:18}}>⬇️</span><span>Download PNG</span></>)}
         <button onClick={onClose} style={{width:"100%",padding:"13px",background:"transparent",color:"#777",border:"none",cursor:"pointer",fontSize:13,marginTop:4,fontFamily:"system-ui"}}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Coach Note Banner (shown on setup when invited client has a note) ──
+function CoachNoteBanner({note,trainerName,accent}){
+  const [open,setOpen]=useState(true);
+  if(!note||!open)return null;
+  return(
+    <div style={{background:"#0A1A0F",border:`1px solid ${accent||"#00E676"}40`,borderRadius:10,padding:"14px 16px",marginBottom:16,position:"relative"}}>
+      <button onClick={()=>setOpen(false)} style={{position:"absolute",top:10,right:12,background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:16}}>✕</button>
+      <div style={{fontSize:10,color:accent||"#00E676",fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>📝 Note from {trainerName||"Your Coach"}</div>
+      <div style={{fontSize:13,color:"#CCCCCC",lineHeight:1.7}}>{note}</div>
+    </div>
+  );
+}
+
+// ── Weekly Target Banner ──────────────────────────────────────
+function WeeklyTargetBanner({targets,accent}){
+  if(!targets)return null;
+  return(
+    <div style={{background:"#0A0A1A",border:`1px solid ${accent||"#3D8EF0"}40`,borderRadius:10,padding:"12px 16px",marginBottom:16}}>
+      <div style={{fontSize:10,color:accent||"#3D8EF0",fontWeight:700,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>🎯 Weekly Targets from Your Coach</div>
+      <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+        {Object.entries(targets).filter(([k])=>k!=="updatedAt").map(([key,val])=>(
+          <div key={key} style={{flex:1,minWidth:120,background:"#111",borderRadius:8,padding:"8px 10px"}}>
+            <div style={{fontSize:10,color:"#777",marginBottom:3}}>{key.replace(/([A-Z])/g," $1").trim()}</div>
+            <div style={{fontSize:18,fontWeight:800,color:accent||"#3D8EF0"}}>{val}<span style={{fontSize:11,color:"#555"}}>/100</span></div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -419,6 +461,9 @@ function ShareModal({canvas,onClose}){
 // FORMIQ SQUAT APP
 // ══════════════════════════════════════════════════════════════
 function FormIQ({ onBack, clientCtx }){
+  const userPlan = getUserPlan();
+  const persona = AI_PERSONA[userPlan] || AI_PERSONA.free;
+
   const [screen,setScreen]         = useState("setup");
   const [camMode,setCamMode]       = useState(null);
   const [totalSets,setTotalSets]   = useState(3);
@@ -447,14 +492,17 @@ function FormIQ({ onBack, clientCtx }){
   const [shareCanvas,setShareCanvas]    = useState(null);
   const [logoImg,setLogoImg]       = useState(null);
   const [logo512Img,setLogo512Img] = useState(null);
-  const [calibrated,setCalibrated] = useState(false);
   const [calStep,setCalStep]       = useState(0);
   const [poseDetected,setPoseDetected] = useState(false);
   const [sessionLog,setSessionLog] = useState(()=>loadSessions());
   const [showHistory,setShowHistory] = useState(false);
-  // Free session gate
   const [showPaywall,setShowPaywall] = useState(false);
-  const [sessionAllowed,setSessionAllowed] = useState(true);
+  // Coach note + weekly target from Firestore
+  const [coachNote,setCoachNote]   = useState(null);
+  const [weeklyTarget,setWeeklyTarget] = useState(null);
+  const [trainerAccent,setTrainerAccent] = useState("#00E676");
+  const [syncing,setSyncing]       = useState(false);
+  const [syncDone,setSyncDone]     = useState(false);
 
   const videoRef=useRef(null),canvasRef=useRef(null),streamRef=useRef(null);
   const poseRef=useRef(null),animFrameRef=useRef(null),historyRef=useRef([]);
@@ -476,11 +524,23 @@ function FormIQ({ onBack, clientCtx }){
     load(`${process.env.PUBLIC_URL}/logo512.png`,setLogo512Img);
   },[]);
 
-  // Check if session is allowed when cam mode selected
+  // Fetch coach note + weekly target for invited clients
+  useEffect(()=>{
+    if(!clientCtx?.trainerSlug||!clientCtx?.clientName) return;
+    const clientId = clientCtx.token || clientCtx.clientName;
+    fetchCoachNote(clientCtx.trainerSlug, clientId).then(n=>{ if(n) setCoachNote(n); });
+    fetchWeeklyTarget(clientCtx.trainerSlug, clientId).then(t=>{ if(t) setWeeklyTarget(t); });
+  },[clientCtx]);
+
+  // Feature gating
+  const canUseQuad = userPlan==="elite" || !!clientCtx;
   const checkAndStartSession = (mode) => {
-    if (clientCtx) { setCamMode(mode); return; } // invited clients bypass gate
-    const allowed = isSessionAllowed(mode);
-    if (!allowed) { setCamMode(mode); setShowPaywall(true); return; }
+    if(mode==="quad-4k"&&!canUseQuad){
+      alert("Quad 4K Multi-Camera is available for Elite subscribers only. Upgrade in Settings.");
+      return;
+    }
+    if(clientCtx){ setCamMode(mode); return; }
+    if(!isSessionAllowed(mode)){ setCamMode(mode); setShowPaywall(true); return; }
     setCamMode(mode);
   };
 
@@ -563,7 +623,9 @@ function FormIQ({ onBack, clientCtx }){
       const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1280},height:{ideal:720}},audio:false});
       streamRef.current=stream;
       if(videoRef.current){videoRef.current.srcObject=stream;videoRef.current.onloadedmetadata=()=>{videoRef.current.play();setCamReady(true);};}
-    }catch(err){setCamError(err.name==="NotAllowedError"?"Camera permission denied. Allow access in browser settings.":err.name==="NotFoundError"?"No camera found on this device.":"Could not start camera: "+err.message);}
+    }catch(err){
+      setCamError(err.name==="NotAllowedError"?"Camera permission denied. Allow access in browser settings.":err.name==="NotFoundError"?"No camera found on this device.":"Could not start camera: "+err.message);
+    }
   };
 
   const stopCamera=()=>{
@@ -592,19 +654,16 @@ function FormIQ({ onBack, clientCtx }){
     }
   },[poseStatus,camReady,camMode]);// eslint-disable-line
 
-  useEffect(()=>{if(screen==="workout"&&camMode==="single"){startCamera(facingMode);loadPose();}if(screen!=="workout")stopCamera();},[screen,camMode]);// eslint-disable-line
-
-  // Start camera when calibration reaches step 3 (live pose preview)
   useEffect(()=>{
-    if(screen==="calibrate"&&calStep===3){
-      startCamera(facingMode);
-      loadPose();
-    }
-    if(screen==="calibrate"&&calStep!==3){
-      stopCamera();
-      setCamReady(false);
-    }
+    if(screen==="workout"&&camMode==="single"){startCamera(facingMode);loadPose();}
+    if(screen!=="workout"&&screen!=="calibrate")stopCamera();
+  },[screen,camMode]);// eslint-disable-line
+
+  useEffect(()=>{
+    if(screen==="calibrate"&&calStep===3){startCamera(facingMode);loadPose();}
+    if(screen==="calibrate"&&calStep!==3){stopCamera();setCamReady(false);}
   },[screen,calStep]);// eslint-disable-line
+
   useEffect(()=>{if(screen!=="workout")return;const t=setInterval(()=>setTipI(i=>(i+1)%TIPS.length),4500);return()=>clearInterval(t);},[screen]);
   useEffect(()=>{const t=setInterval(()=>setScan(s=>(s+1.2)%100),35);return()=>clearInterval(t);},[]);
   useEffect(()=>{if(!analyzing)return;const t=setInterval(()=>setDots(d=>(d+1)%4),450);return()=>clearInterval(t);},[analyzing]);
@@ -616,7 +675,6 @@ function FormIQ({ onBack, clientCtx }){
 
   const finishSet=async()=>{
     if(analyzingRef.current)return;
-    // Increment session usage in db
     if(!clientCtx) incrementSession(camMode||"single");
     const realM=(camMode==="single"&&poseStatus==="ready"&&repDataRef.current.length>=2)?calcRealMetrics(repDataRef.current):null;
     const m=realM||mkSimMetrics(curSetRef.current);
@@ -628,34 +686,64 @@ function FormIQ({ onBack, clientCtx }){
     if(curSetRef.current<totalSetsRef.current)setResting(true);
     repDataRef.current=[];repStateRef.current="up";currentRepRef.current=null;
     setRepPhase("up");setFormAlerts([]);setLiveAngles(null);
+
+    // Build AI prompt based on plan
+    const planPrompts = {
+      free:  `You are Victor, a friendly AI training assistant for FormIQ. Give encouraging, beginner-friendly feedback in exactly 3 sentences. Focus on one key improvement.`,
+      pro:   `You are Ruby, an experienced AI coach for FormIQ. Give direct, technical coaching feedback in exactly 3 sentences. Be specific about form mechanics.`,
+      elite: `You are Pearl, an elite AI fitness expert for FormIQ. Give advanced, science-backed analysis in exactly 3 sentences. Reference biomechanics principles.`,
+    };
+    const sysPrompt = clientCtx ? planPrompts.pro : (planPrompts[userPlan]||planPrompts.free);
+
     try{
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:800,messages:[{role:"user",content:
-          `You are an elite strength coach. Athlete finished Set ${curSetRef.current} of ${totalSetsRef.current} (10 squats). ${realM?"Live pose data:":"Simulated data:"}
-Knee Alignment: ${m.kneeAlignment}/100\nSpine Neutrality: ${m.spineNeutrality}/100\nSquat Depth: ${m.squatDepth}/100\nTempo Control: ${m.tempoConsistency}/100\nHip Hinge: ${m.hipHinge}/100\nSet Score: ${score}/100
-Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})});
+          `${sysPrompt}
+Athlete finished Set ${curSetRef.current} of ${totalSetsRef.current} (10 squats). ${realM?"Live pose data:":"Simulated data:"}
+Knee Alignment: ${m.kneeAlignment}/100
+Spine Neutrality: ${m.spineNeutrality}/100
+Squat Depth: ${m.squatDepth}/100
+Tempo Control: ${m.tempoConsistency}/100
+Hip Hinge: ${m.hipHinge}/100
+Set Score: ${score}/100
+No lists or headers. Speak directly to the athlete.`}]})});
       const d=await res.json();
       const text=d.content?.map(b=>b.text||"").join("").trim();
-      setFeedback(text||fallback(score,curSetRef.current,totalSetsRef.current));
-    }catch{setFeedback(fallback(score,curSetRef.current,totalSetsRef.current));}
+      setFeedback(text||fallback(score,curSetRef.current,totalSetsRef.current,userPlan));
+    }catch{setFeedback(fallback(score,curSetRef.current,totalSetsRef.current,userPlan));}
     setAnalyzing(false);
   };
   finishSetRef.current=finishSet;
 
-  const nextSet=()=>{
+  const nextSet=async()=>{
     if(curSet>=totalSets){
       const h=historyRef.current;
       const fs=h.length?Math.round(h.reduce((s,e)=>s+e.score,0)/h.length):0;
       setFinalScore(fs);
-      // Save to session history
+      // Build session entry
       const sessionEntry={
         id:Date.now(),date:new Date().toISOString(),score:fs,
         totalSets,totalReps:totalSets*10,camMode,
         usedPose:h.some(s=>s.usedPose),
         sets:h.map(s=>({setNumber:s.setNumber,score:s.score,usedPose:s.usedPose})),
         avgMetrics:METRICS_DEF.reduce((acc,{key})=>({...acc,[key]:h.length?Math.round(h.reduce((sum,e)=>sum+e.metrics[key],0)/h.length):0}),{}),
+        clientName: clientCtx?.clientName||screenName||"Anonymous",
+        trainerSlug: clientCtx?.trainerSlug||null,
       };
-      saveSession(sessionEntry);setSessionLog(loadSessions());
+      // Save to localStorage
+      saveSession(sessionEntry);
+      setSessionLog(loadSessions());
+      // ── SYNC TO FIREBASE ── if invited client, sync to trainer's Firestore
+      if(clientCtx?.trainerSlug){
+        setSyncing(true);
+        try{
+          await ensureAuth();
+          await syncClientSession(clientCtx.trainerSlug, clientCtx.clientName||"Client", sessionEntry);
+          setSyncDone(true);
+          setTimeout(()=>setSyncDone(false),3000);
+        }catch(e){console.warn("Sync failed:",e.message);}
+        setSyncing(false);
+      }
       setScreen("results");
     }else{
       const n=curSet+1;setCurSet(n);curSetRef.current=n;
@@ -665,13 +753,15 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
 
   const handleShare=(fs,h,ts)=>{
     if(!screenName){setShowNameModal(true);return;}
-    const c=generateReportCanvas({screenName,finalScore:fs,history:h,totalSets:ts,REPS,logoImg,logo512Img});
+    const refCode = getReferralCode();
+    const c=generateReportCanvas({screenName,finalScore:fs,history:h,totalSets:ts,REPS,logoImg,logo512Img,referralCode:refCode});
     setShareCanvas(c);
   };
   const onNameSave=(name)=>{
     setScreenName(name);if(name)localStorage.setItem("fiq_name",name);
     setShowNameModal(false);
-    const c=generateReportCanvas({screenName:name,finalScore:finalScore??0,history:historyRef.current,totalSets,REPS,logoImg,logo512Img});
+    const refCode = getReferralCode();
+    const c=generateReportCanvas({screenName:name,finalScore:finalScore??0,history:historyRef.current,totalSets,REPS,logoImg,logo512Img,referralCode:refCode});
     setShareCanvas(c);
   };
 
@@ -682,7 +772,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     setResting(false);setRestT(0);setTotalSets(3);totalSetsRef.current=3;
     setCamError("");setCamReady(false);setPoseStatus("idle");poseRef.current=null;
     setFormAlerts([]);setLiveAngles(null);repDataRef.current=[];repStateRef.current="up";
-    currentRepRef.current=null;setShareCanvas(null);setCalibrated(false);setCalStep(0);setPoseDetected(false);
+    currentRepRef.current=null;setShareCanvas(null);setCalStep(0);setPoseDetected(false);
   };
 
   const tapRep=()=>{
@@ -699,7 +789,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
   const pil=(a)=>({width:36,height:36,borderRadius:8,cursor:"pointer",background:a?C.accent:C.s2,color:a?"#000":C.text,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:14});
   const lbl={fontSize:10,letterSpacing:3,color:C.muted,textTransform:"uppercase",fontWeight:600};
 
-  // ── SETUP ────────────────────────────────────────────────────
+  // ── SETUP ─────────────────────────────────────────────────────
   if(screen==="setup") return(
     <div style={{...page,padding:"28px 20px 32px"}}>
       <style>{`
@@ -714,21 +804,20 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
         .pu{animation:pulse 1.8s ease-in-out infinite}
       `}</style>
       <div style={{maxWidth:560,margin:"0 auto"}}>
-
-        {/* Hero — co-branded if invited client, normal otherwise */}
-        {clientCtx ? (
-          <div className="fu fu1" style={{marginBottom:28}}>
+        {clientCtx?(
+          <div className="fu fu1" style={{marginBottom:20}}>
             <CoachBrandedBanner ctx={clientCtx} fullHeader/>
+            {coachNote&&<CoachNoteBanner note={coachNote} trainerName={clientCtx.trainerName} accent={trainerAccent}/>}
+            {weeklyTarget&&<WeeklyTargetBanner targets={weeklyTarget} accent="#3D8EF0"/>}
           </div>
-        ) : (
+        ):(
           <div className="fu fu1" style={{textAlign:"center",marginBottom:36}}>
             {onBack&&(
               <button onClick={onBack} style={{display:"inline-flex",alignItems:"center",gap:6,background:"transparent",border:`1px solid ${C.border}`,color:C.mutedLight,borderRadius:8,padding:"6px 14px",cursor:"pointer",fontSize:12,fontWeight:600,marginBottom:16,fontFamily:font}}>← Home</button>
             )}
-            <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ"
-              style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
-            <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:C.accent,textTransform:"uppercase",fontWeight:600,background:C.accent+"15",padding:"4px 14px",borderRadius:20,border:`1px solid ${C.accent}30`}}>
-              AI Squat Coach
+            <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:110,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 14px"}}/>
+            <div style={{display:"inline-block",fontSize:10,letterSpacing:3,color:persona.color,textTransform:"uppercase",fontWeight:600,background:persona.color+"15",padding:"4px 14px",borderRadius:20,border:`1px solid ${persona.color}30`}}>
+              {persona.title} · {persona.name}
             </div>
             <div style={{color:C.mutedLight,marginTop:12,fontSize:14}}>
               Live pose tracking · AI coaching · Real-time form scoring
@@ -736,23 +825,22 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           </div>
         )}
 
-        {/* Camera cards */}
         <div className="fu fu2" style={{marginBottom:18}}>
           <div style={{...lbl,marginBottom:10}}>Camera Setup</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             {[
               {id:"single",title:"Single Camera",badge:"LIVE NOW",locked:false,
                lines:["Uses your device camera","Side-on view recommended","Webcam or phone"],
-               note:`✓ ${sessionsRemaining("single")===Infinity?"Unlimited":sessionsRemaining("single")+" free sessions left"}`},
-              {id:"quad-4k",title:"Quad 4K System",badge:"COMING SOON",locked:true,
+               note:`✓ ${sessionsRemaining("single")===Infinity?"Unlimited":sessionsRemaining("single")+" sessions left"}`},
+              {id:"quad-4k",title:"Quad 4K System",badge:canUseQuad?"COMING SOON":"ELITE ONLY",locked:!canUseQuad,
                lines:["4× cameras via HDMI","Front·Back·Left·Right","Capture card required"],
-               note:`${sessionsRemaining("quad-4k")===Infinity?"Unlimited":sessionsRemaining("quad-4k")+" test sessions left"}`},
+               note:canUseQuad?"🔒 Multi-cam phase":"🔒 Elite subscribers only"},
             ].map(({id,title,badge,locked,lines,note})=>(
               <div key={id} className="cc" onClick={()=>checkAndStartSession(id)} style={{
                 ...card(false),cursor:"pointer",
                 border:`1px solid ${camMode===id?C.accent:C.border}`,
                 background:camMode===id?"#071510":C.surface,
-                position:"relative",opacity:locked&&camMode!==id?.78:1,
+                position:"relative",opacity:locked?.78:1,
                 transition:"border-color .2s,background .2s"}}>
                 <div style={{position:"absolute",top:12,right:12,fontSize:9,fontWeight:700,letterSpacing:1.5,padding:"3px 8px",borderRadius:4,background:locked?C.s3:(camMode===id?C.accent:C.s2),color:locked?C.warn:(camMode===id?"#000":C.muted),border:locked?`1px solid ${C.warn}40`:"none"}}>{badge}</div>
                 <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>{title}</div>
@@ -761,12 +849,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
               </div>
             ))}
           </div>
-          {/* Session badge */}
-          {camMode&&!clientCtx&&(
-            <div style={{marginTop:10}}>
-              <SessionBadge camMode={camMode}/>
-            </div>
-          )}
+          {camMode&&!clientCtx&&<div style={{marginTop:10}}><SessionBadge camMode={camMode}/></div>}
         </div>
 
         <div className="fu fu3" style={{...card(false),marginBottom:18}}>
@@ -794,6 +877,24 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           </div>
         )}
 
+        {/* Referral banner */}
+        {!clientCtx&&(
+          <div className="fu fu4" style={{...card(false),marginBottom:18,background:"#0A100A",border:`1px solid ${C.accent}25`}}>
+            <div style={{fontSize:11,color:C.accent,fontWeight:700,marginBottom:6}}>🎁 Bring-A-Friend — Earn Discounts</div>
+            <div style={{fontSize:12,color:C.mutedLight,marginBottom:8,lineHeight:1.6}}>
+              Share your referral link. 1 friend = 10% off · 3 friends = 20% off · 5+ friends = 35% off
+            </div>
+            <div style={{fontFamily:"monospace",fontSize:12,color:C.accent,background:C.s2,padding:"8px 12px",borderRadius:6,wordBreak:"break-all"}}>
+              formiq.name.ng/ref/{getReferralCode()}
+            </div>
+            {getReferralDiscount()>0&&(
+              <div style={{marginTop:8,fontSize:12,color:C.accent,fontWeight:700}}>
+                🎉 You have a {getReferralDiscount()}% discount applied!
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="fu fu5">
           <button onClick={()=>{
             if(!camMode)return;
@@ -811,54 +912,46 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             </button>
           </div>
         )}
-
-        <div style={{display:"flex",gap:6,marginTop:16,flexWrap:"wrap",justifyContent:"center"}}>
-          {["Live pose","Auto rep count","AI coaching","Form alerts","Shareable report"].map(f=>(
-            <span key={f} style={{fontSize:11,color:C.mutedLight,background:C.s2,padding:"3px 10px",borderRadius:20}}>{f}</span>
-          ))}
-        </div>
       </div>
-
       {showNameModal&&<ScreenNameModal value={screenName} onSave={onNameSave}/>}
       {showHistory&&<HistoryModal sessions={sessionLog} onClose={()=>setShowHistory(false)} onClear={()=>{clearSessions();setSessionLog([]);setShowHistory(false);}}/>}
-      {showPaywall&&<PaywallModal camMode={camMode||"single"} onPaid={()=>{setShowPaywall(false);setSessionAllowed(true);}} onClose={()=>setShowPaywall(false)}/>}
+      {showPaywall&&<PaywallModal camMode={camMode||"single"} onPaid={()=>setShowPaywall(false)} onClose={()=>setShowPaywall(false)}/>}
     </div>
   );
 
-  // ── CALIBRATION ──────────────────────────────────────────────
+  // ── CALIBRATION ───────────────────────────────────────────────
   if(screen==="calibrate"){
     const CAL_STEPS=[
-      {icon:"📐",title:"Position your camera",body:"Place your phone or webcam to the side — your full body from head to feet must be visible. Ideal distance: 6–8 feet from the camera.",
+      {icon:"📐",title:"Position your camera",body:"Place your phone or webcam to the side — your full body from head to feet must be visible. Ideal distance: 6–8 feet.",
        visual:<div style={{display:"flex",justifyContent:"center",alignItems:"flex-end",gap:24,padding:"12px 0"}}>
-         <div style={{textAlign:"center"}}><div style={{fontSize:32,marginBottom:4}}>📱</div><div style={{fontSize:10,color:C.mutedLight,letterSpacing:1}}>CAMERA</div></div>
+         <div style={{textAlign:"center"}}><div style={{fontSize:32,marginBottom:4}}>📱</div><div style={{fontSize:10,color:C.mutedLight}}>CAMERA</div></div>
          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}><div style={{height:2,width:80,background:`repeating-linear-gradient(90deg,${C.accent} 0,${C.accent} 6px,transparent 6px,transparent 12px)`}}/><div style={{fontSize:11,color:C.mutedLight}}>6–8 ft</div></div>
-         <div style={{textAlign:"center"}}><div style={{fontSize:32,marginBottom:4}}>🏋️</div><div style={{fontSize:10,color:C.mutedLight,letterSpacing:1}}>YOU</div></div>
+         <div style={{textAlign:"center"}}><div style={{fontSize:32,marginBottom:4}}>🏋️</div><div style={{fontSize:10,color:C.mutedLight}}>YOU</div></div>
        </div>},
-      {icon:"↔️",title:"Stand side-on to the camera",body:"Face left or right — not toward the camera. Your left or right side should face the lens so MediaPipe can track your knee, hip, and spine angles accurately.",
+      {icon:"↔️",title:"Stand side-on",body:"Face left or right — not toward the camera. Your side should face the lens so MediaPipe can track knee, hip, and spine angles accurately.",
        visual:<div style={{display:"flex",justifyContent:"center",gap:32,padding:"12px 0"}}>
          {[{label:"✅ CORRECT",sub:"Side view",ok:true,e:"🚶"},{label:"❌ WRONG",sub:"Facing camera",ok:false,e:"🧍"}].map(({label,sub,ok,e})=>(
            <div key={label} style={{textAlign:"center"}}>
              <div style={{width:60,height:80,borderRadius:8,marginBottom:6,background:ok?C.accent+"18":C.danger+"18",border:`1.5px solid ${ok?C.accent:C.danger}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:28}}>{e}</div>
              <div style={{fontSize:10,fontWeight:700,color:ok?C.accent:C.danger}}>{label}</div>
-             <div style={{fontSize:10,color:C.mutedLight}}>{sub}</div>
            </div>
          ))}
        </div>},
-      {icon:"💡",title:"Lighting & background",body:"Good lighting helps the AI track you accurately. Stand against a plain background if possible and avoid bright lights directly behind you.",
+      {icon:"💡",title:"Lighting & background",body:"Good lighting helps the AI track you accurately. Stand against a plain background and avoid bright lights behind you.",
        visual:<div style={{display:"flex",justifyContent:"center",gap:20,padding:"12px 0"}}>
          {[{e:"☀️",l:"Natural light",ok:true},{e:"🌑",l:"Dark room",ok:false},{e:"🔦",l:"Backlight",ok:false}].map(({e,l,ok})=>(
            <div key={l} style={{textAlign:"center"}}><div style={{fontSize:28,marginBottom:4}}>{e}</div><div style={{fontSize:10,color:ok?C.accent:C.danger,fontWeight:600}}>{ok?"✓":"✗"}</div><div style={{fontSize:10,color:C.mutedLight}}>{l}</div></div>
          ))}
        </div>},
       {icon:"🤖",title:"Confirm pose tracking",
-       body:poseDetected?"✅ Pose tracking is active — your skeleton is visible. You're ready to squat!":"Stand in frame now. The AI is loading and will detect your pose automatically. Wait for the green confirmation.",
+       body:poseDetected?"✅ Pose tracking active — your skeleton is visible. You're ready!":"Stand in frame now. The AI will detect your pose automatically.",
        visual:(
          <div style={{position:"relative",borderRadius:10,overflow:"hidden",background:"#000",height:160}}>
            <video ref={videoRef} autoPlay playsInline muted style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
            <canvas ref={canvasRef} style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}/>
            <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",background:poseDetected?"#00E67622":"#00000088",border:`1.5px solid ${poseDetected?C.accent:C.border}`,borderRadius:8,padding:"5px 14px",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:7}}>
-             {poseDetected?<><div style={{width:7,height:7,borderRadius:"50%",background:C.accent}}/><span style={{fontSize:11,color:C.accent,fontWeight:700,letterSpacing:1}}>POSE DETECTED</span></>
-               :<span style={{fontSize:11,color:C.mutedLight,letterSpacing:1}} className="pu">SCANNING...</span>}
+             {poseDetected?<><div style={{width:7,height:7,borderRadius:"50%",background:C.accent}}/><span style={{fontSize:11,color:C.accent,fontWeight:700}}>POSE DETECTED</span></>
+               :<span style={{fontSize:11,color:C.mutedLight}} className="pu">SCANNING...</span>}
            </div>
          </div>
        )},
@@ -894,7 +987,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           )}
           <div style={{display:"flex",gap:10}}>
             {calStep>0&&(<button onClick={()=>setCalStep(c=>c-1)} style={{flex:1,padding:"15px",background:C.s2,color:C.text,border:`1px solid ${C.border}`,borderRadius:10,cursor:"pointer",fontWeight:700,fontSize:14,fontFamily:font}}>← Previous</button>)}
-            <button onClick={()=>{if(isLast){setCalibrated(true);setScreen("workout");}else setCalStep(c=>c+1);}}
+            <button onClick={()=>{if(isLast){setScreen("workout");}else setCalStep(c=>c+1);}}
               style={{flex:2,padding:"15px",background:C.accent,color:"#000",border:"none",borderRadius:10,cursor:"pointer",fontWeight:800,fontSize:14,letterSpacing:2,textTransform:"uppercase",fontFamily:font}}>
               {isLast?(poseDetected?"Start Session →":"Skip & Start →"):"Next →"}
             </button>
@@ -904,7 +997,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     );
   }
 
-  // ── WORKOUT ──────────────────────────────────────────────────
+  // ── WORKOUT ───────────────────────────────────────────────────
   if(screen==="workout"){
     const pct=(reps/REPS)*100;
     const poseActive=camMode==="single"&&poseStatus==="ready";
@@ -1062,7 +1155,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     );
   }
 
-  // ── ANALYSIS ─────────────────────────────────────────────────
+  // ── ANALYSIS ──────────────────────────────────────────────────
   if(screen==="analysis"){
     const score=metrics?calcScore(metrics):0;
     const restRemaining=REST-restT;
@@ -1075,11 +1168,19 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
           <div style={{textAlign:"center",marginBottom:26,paddingTop:6}}>
             <div style={{...lbl,marginBottom:12}}>Set {historyRef.current.length} · {REPS} reps · {usedPose?"Live Pose":"Simulated"}</div>
             <div style={{fontSize:88,fontWeight:900,letterSpacing:-5,lineHeight:1,color:analyzing?C.muted:mc(score),transition:"color .5s"}}>{analyzing?"—":score}</div>
-            <div style={{fontSize:16,color:analyzing?C.muted:mc(score),fontWeight:700,marginTop:4}}>{analyzing?`Analysing form${".".repeat(dots)}`:`${grade(score)}  ·  ${gLabel(score)}`}</div>
+            <div style={{fontSize:16,color:analyzing?C.muted:mc(score),fontWeight:700,marginTop:4}}>{analyzing?`${persona.name} is analysing${".".repeat(dots)}`:`${grade(score)}  ·  ${gLabel(score)}`}</div>
             {usedPose&&!analyzing&&(
               <div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:5,background:C.accent+"15",border:`1px solid ${C.accent}30`,borderRadius:20,padding:"3px 12px"}}>
                 <div style={{width:5,height:5,borderRadius:"50%",background:C.accent}}/>
                 <span style={{fontSize:10,color:C.accent,letterSpacing:2,fontWeight:700}}>LIVE POSE DATA</span>
+              </div>
+            )}
+            {/* Firebase sync status */}
+            {(syncing||syncDone)&&(
+              <div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:5,background:syncDone?"#00E67615":"#3D8EF015",border:`1px solid ${syncDone?"#00E67640":"#3D8EF040"}`,borderRadius:20,padding:"3px 12px"}}>
+                <span style={{fontSize:10,color:syncDone?"#00E676":"#3D8EF0",fontWeight:700}}>
+                  {syncing?"⟳ Syncing to coach...":"✓ Synced to trainer dashboard"}
+                </span>
               </div>
             )}
           </div>
@@ -1103,13 +1204,17 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
               })}
             </div>
           )}
-          <div style={{...card(true),marginBottom:14}}>
+          <div style={{...card(true),marginBottom:14,borderColor:`${persona.color}40`}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
-              <div style={{width:22,height:22,borderRadius:6,background:C.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>⚡</div>
-              <span style={{...lbl,color:C.accent}}>AI Coach · Claude</span>
+              <div style={{width:22,height:22,borderRadius:6,background:persona.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13}}>
+                {userPlan==="elite"?"💎":userPlan==="pro"?"🔵":"⚡"}
+              </div>
+              <span style={{...lbl,color:persona.color}}>{persona.title} · {persona.name}</span>
               {analyzing&&<span style={{fontSize:11,color:C.mutedLight,marginLeft:4}}>thinking{".".repeat(dots)}</span>}
             </div>
-            <p style={{margin:0,fontSize:14,lineHeight:1.75,color:analyzing?C.muted:"#DDDDDD"}}>{analyzing?"Analysing your squat mechanics across all 10 reps...":feedback}</p>
+            <p style={{margin:0,fontSize:14,lineHeight:1.75,color:analyzing?C.muted:"#DDDDDD"}}>
+              {analyzing?`${persona.name} is analysing your squat mechanics across all 10 reps...`:feedback}
+            </p>
           </div>
           {resting&&(
             <div style={{...card(false),marginBottom:14,display:"flex",alignItems:"center",gap:16}}>
@@ -1151,7 +1256,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
     );
   }
 
-  // ── RESULTS ──────────────────────────────────────────────────
+  // ── RESULTS ───────────────────────────────────────────────────
   const fs=finalScore??0,gc=mc(fs);
   const avgM=METRICS_DEF.map(({key,label:lb})=>({key,label:lb,avg:history.length?Math.round(history.reduce((s,e)=>s+e.metrics[key],0)/history.length):0}));
   const mostImp=avgM.reduce((a,b)=>{
@@ -1170,6 +1275,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             <div style={{fontSize:68,fontWeight:900,letterSpacing:-4,color:gc,lineHeight:1}}>{fs}</div>
             <div style={{fontSize:17,color:gc,fontWeight:700,marginTop:4}}>{grade(fs)}&nbsp;&nbsp;·&nbsp;&nbsp;{gLabel(fs)}</div>
             <div style={{color:C.mutedLight,marginTop:5,fontSize:12}}>{totalSets} sets · {totalSets*REPS} reps{poseCount>0&&` · ${poseCount}/${totalSets} pose`}</div>
+            {syncDone&&<div style={{fontSize:11,color:C.accent,marginTop:4}}>✓ Synced to trainer</div>}
           </div>
         </div>
         <div style={{...card(false),marginBottom:14}}>
@@ -1215,7 +1321,7 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             <div style={{fontSize:20}}>📊</div>
             <div>
               <div style={{fontWeight:700,fontSize:14,color:C.text}}>Share Your Session Report</div>
-              <div style={{fontSize:12,color:C.mutedLight,marginTop:2}}>Invite friends to try FormIQ — includes your score, metrics & site link</div>
+              <div style={{fontSize:12,color:C.mutedLight,marginTop:2}}>Includes referral link — friends get a discount too</div>
             </div>
           </div>
           <button onClick={()=>handleShare(fs,historyRef.current,totalSets)} style={{width:"100%",padding:"14px",background:C.accent,color:"#000",border:"none",borderRadius:8,fontWeight:800,cursor:"pointer",fontSize:14,letterSpacing:2,textTransform:"uppercase",fontFamily:font}}>
@@ -1228,26 +1334,17 @@ Respond in exactly 3 sentences. Direct coaching voice. No lists or headers.`}]})
             </div>
           )}
         </div>
-        <div style={{...card(false),marginBottom:20,background:C.s2}}>
-          <div style={{...lbl,marginBottom:10}}>Multi-Cam Phase — Coming Next</div>
-          {["Quad 4K HDMI camera input via capture card","360° pose tracking — front, back, left, right","Knee cave detection from front camera","Bar path tracking overlay on back camera","Rep-by-rep heatmap and long-term analytics"].map((item,i)=>(
-            <div key={i} style={{display:"flex",gap:8,marginBottom:8,alignItems:"flex-start"}}>
-              <div style={{color:C.mutedLight,fontSize:12,marginTop:1,flexShrink:0}}>○</div>
-              <div style={{fontSize:12,color:C.mutedLight,lineHeight:1.5}}>{item}</div>
-            </div>
-          ))}
-        </div>
         <button onClick={restart} style={{width:"100%",padding:"17px",fontSize:14,fontWeight:800,background:C.accent,color:"#000",border:"none",borderRadius:10,cursor:"pointer",letterSpacing:2,textTransform:"uppercase",fontFamily:font}}>
           New Session
         </button>
       </div>
       {showNameModal&&<ScreenNameModal value={screenName} onSave={onNameSave}/>}
-      {shareCanvas&&<ShareModal canvas={shareCanvas} onClose={()=>setShareCanvas(null)}/>}
+      {shareCanvas&&<ShareModal canvas={shareCanvas} referralCode={getReferralCode()} onClose={()=>setShareCanvas(null)}/>}
     </div>
   );
 }
 
-// ── Trainer Login Modal ───────────────────────────────────────
+// ── Trainer Login ─────────────────────────────────────────────
 function TrainerLogin({ onLogin, onRegister, onClose }) {
   const [email,setEmail]=useState("");
   const [pass,setPass]=useState("");
@@ -1259,7 +1356,6 @@ function TrainerLogin({ onLogin, onRegister, onClose }) {
     if(t.email!==email){ setErr("Email not found."); return; }
     const pwHash=btoa(encodeURIComponent(pass));
     if(t._pwHash&&t._pwHash!==pwHash){ setErr("Incorrect password."); return; }
-    // Legacy accounts created before password existed — allow login by email only
     onLogin(t);
   };
   return(
@@ -1271,17 +1367,15 @@ function TrainerLogin({ onLogin, onRegister, onClose }) {
         </div>
         <div style={{fontSize:16,fontWeight:700,color:"#F0F2F5",marginBottom:20}}>Trainer Login</div>
         {err&&<div style={{background:"#FF475718",border:"1px solid #FF475740",borderRadius:8,padding:"8px 12px",fontSize:12,color:"#FF9999",marginBottom:14}}>{err}</div>}
-        <div style={{marginBottom:12}}>
-          <div style={{fontSize:11,color:"#6B7280",marginBottom:5,letterSpacing:1.5,textTransform:"uppercase"}}>Email</div>
-          <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@email.com"
-            style={{width:"100%",padding:"11px 14px",background:"#141619",border:"1px solid #23262D",borderRadius:8,color:"#F0F2F5",fontSize:14,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
-        </div>
-        <div style={{marginBottom:20}}>
-          <div style={{fontSize:11,color:"#6B7280",marginBottom:5,letterSpacing:1.5,textTransform:"uppercase"}}>Password</div>
-          <input type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••"
-            onKeyDown={e=>e.key==="Enter"&&attempt()}
-            style={{width:"100%",padding:"11px 14px",background:"#141619",border:"1px solid #23262D",borderRadius:8,color:"#F0F2F5",fontSize:14,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
-        </div>
+        {[{label:"Email",key:"email",type:"email",ph:"you@email.com",val:email,set:setEmail},
+          {label:"Password",key:"pass",type:"password",ph:"••••••••",val:pass,set:setPass}].map(({label,key,type,ph,val,set})=>(
+          <div key={key} style={{marginBottom:14}}>
+            <div style={{fontSize:11,color:"#6B7280",marginBottom:5,letterSpacing:1.5,textTransform:"uppercase"}}>{label}</div>
+            <input type={type} value={val} onChange={e=>set(e.target.value)} placeholder={ph}
+              onKeyDown={e=>e.key==="Enter"&&attempt()}
+              style={{width:"100%",padding:"11px 14px",background:"#141619",border:"1px solid #23262D",borderRadius:8,color:"#F0F2F5",fontSize:14,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
+          </div>
+        ))}
         <button onClick={attempt} style={{width:"100%",padding:"13px",background:"#00E676",color:"#000",border:"none",borderRadius:8,fontWeight:800,fontSize:14,cursor:"pointer",letterSpacing:1.5,textTransform:"uppercase",fontFamily:font,marginBottom:12}}>
           Login →
         </button>
@@ -1302,20 +1396,20 @@ export default function App() {
   const [showLogin,setShowLogin] = useState(false);
 
   useEffect(()=>{
-    // 1. Check URL for invite hash: #/c/TRAINERSLUG/TOKEN
     const parsed = parseInviteHash(window.location.hash);
     if(parsed){ setView("invite"); return; }
-    // 2. Returning invited client
     const savedCtx = getClientCtx();
     if(savedCtx){ setInviteCtx(savedCtx); setView("squat"); return; }
-    // 3. Landing page
+    // Check referral code in URL
+    const refMatch = window.location.pathname.match(/\/ref\/([A-Z0-9]+)/i);
+    if(refMatch){ localStorage.setItem("fiq_referred_by", refMatch[1]); }
     setView("landing");
   },[]);
 
   const handleSelect = (dest) => {
-    if(dest==="squat")          { setView("squat"); return; }
-    if(dest==="trainer-login")  { setShowLogin(true); return; }
-    if(dest==="register")       { setView("register"); return; }
+    if(dest==="squat")         { setView("squat"); return; }
+    if(dest==="trainer-login") { setShowLogin(true); return; }
+    if(dest==="register")      { setView("register"); return; }
     if(dest==="trainer"){
       const existing=getTrainer();
       if(existing){ setTrainerData(existing); setView("trainer"); }
@@ -1325,67 +1419,30 @@ export default function App() {
     setView(dest);
   };
 
-  // Loading splash
   if(view==="loading") return(
     <div style={{background:"#080808",minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}>
       <img src={`${process.env.PUBLIC_URL}/formIQ.png`} alt="FormIQ" style={{height:60,width:"auto",opacity:.6}}/>
     </div>
   );
-
-  // Invite flow
   if(view==="invite"){
     const parsed=parseInviteHash(window.location.hash);
-    return(
-      <ClientInviteLanding
-        trainerSlug={parsed.trainerSlug}
-        token={parsed.token}
-        onAccept={(ctx)=>{
-          saveClientCtx(ctx);
-          setInviteCtx(ctx);
-          window.history.replaceState(null,"",window.location.pathname);
-          setView("squat");
-        }}
-      />
-    );
+    return(<ClientInviteLanding
+      trainerSlug={parsed.trainerSlug} token={parsed.token}
+      onAccept={(ctx)=>{ saveClientCtx(ctx); setInviteCtx(ctx); window.history.replaceState(null,"",window.location.pathname); setView("squat"); }}
+    />);
   }
-
-  // Invited client squat app (no back button, this IS their app)
-  if(view==="squat"&&inviteCtx)
-    return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
-
-  // Regular squat app
-  if(view==="squat")
-    return <FormIQ onBack={()=>setView("landing")} clientCtx={null}/>;
-
-  // Trainer registration
-  if(view==="register")
-    return <TrainerRegistration
-      onDone={()=>{ const t=getTrainer(); setTrainerData(t); setView("trainer"); }}
-      onLogin={()=>setShowLogin(true)}
-    />;
-
-  // Trainer dashboard
+  if(view==="squat"&&inviteCtx) return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
+  if(view==="squat")            return <FormIQ onBack={()=>setView("landing")} clientCtx={null}/>;
+  if(view==="register")         return <TrainerRegistration onDone={()=>{ const t=getTrainer(); setTrainerData(t); setView("trainer"); }} onLogin={()=>setShowLogin(true)}/>;
   if(view==="trainer"){
     const t=trainerData||getTrainer();
     if(!t){ setView("register"); return null; }
-    return <TrainerDashboard
-      trainer={t}
-      onBack={()=>setView("landing")}
-      onLogout={()=>{ setTrainerData(null); setView("landing"); }}
-    />;
+    return <TrainerDashboard trainer={t} onBack={()=>setView("landing")} onLogout={()=>{ setTrainerData(null); setView("landing"); }}/>;
   }
-
-  // Landing page (default)
   return(
     <>
       <LandingPage onGetStarted={handleSelect}/>
-      {showLogin&&(
-        <TrainerLogin
-          onLogin={(t)=>{ setTrainerData(t); setShowLogin(false); setView("trainer"); }}
-          onRegister={()=>{ setShowLogin(false); setView("register"); }}
-          onClose={()=>setShowLogin(false)}
-        />
-      )}
+      {showLogin&&<TrainerLogin onLogin={(t)=>{ setTrainerData(t); setShowLogin(false); setView("trainer"); }} onRegister={()=>{ setShowLogin(false); setView("register"); }} onClose={()=>setShowLogin(false)}/>}
     </>
   );
 }
