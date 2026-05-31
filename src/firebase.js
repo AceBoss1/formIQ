@@ -9,7 +9,6 @@ import { initializeApp } from "firebase/app";
 import {
   getFirestore, doc, setDoc, getDoc, collection,
   onSnapshot, addDoc, query, where, orderBy, serverTimestamp,
-  updateDoc, deleteDoc,
 } from "firebase/firestore";
 import {
   getAuth, signInAnonymously, onAuthStateChanged,
@@ -30,7 +29,6 @@ const firebaseConfig = {
 // ── Init ──────────────────────────────────────────────────────
 let app, db, auth;
 let firebaseReady = false;
-let firebaseError = null;
 
 try {
   app  = initializeApp(firebaseConfig);
@@ -38,7 +36,6 @@ try {
   auth = getAuth(app);
   firebaseReady = true;
 } catch (e) {
-  firebaseError = e.message;
   console.warn("Firebase not configured — running in offline/localStorage mode.", e.message);
 }
 

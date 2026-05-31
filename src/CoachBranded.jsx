@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 
-const AFRICAN_CURRENCIES = ["NGN","GHS","KES","ZAR","UGX","TZS","XOF","ETB","EGP","MAD","ZMW","RWF"];
-
 // ── Currency config ───────────────────────────────────────────────────────
 export const CURRENCIES = {
   USD:{ symbol:"$",  name:"US Dollar",        flag:"🇺🇸", gateway:"stripe"   },

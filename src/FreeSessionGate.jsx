@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FREE_LIMITS, getSessionUsage, isSessionAllowed, sessionsRemaining, markPaid } from "./db";
+import { FREE_LIMITS, getSessionUsage, sessionsRemaining, markPaid } from "./db";
 
 const font = "system-ui,-apple-system,'Segoe UI',sans-serif";
 const C = { bg:"#080808", surface:"#111", s2:"#1A1A1A", border:"#272727", accent:"#00E676", warn:"#FFB300", danger:"#FF3D3D", text:"#F0F0F0", muted:"#666" };

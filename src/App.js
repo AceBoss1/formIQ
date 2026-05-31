@@ -2,9 +2,9 @@ import TrainerDashboard from "./TrainerDashboard";
 import TrainerRegistration from "./TrainerRegistration";
 import LandingPage from "./LandingPage";
 import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash } from "./CoachBranded";
-import { getClientCtx, saveClientCtx, getTrainer, getSessionUsage, isSessionAllowed, incrementSession, FREE_LIMITS, sessionsRemaining } from "./db";
+import { getClientCtx, saveClientCtx, getTrainer, isSessionAllowed, incrementSession, sessionsRemaining } from "./db";
 import { SessionBadge, PaywallModal } from "./FreeSessionGate";
-import { syncClientSession, fetchCoachNote, fetchWeeklyTarget, ensureAuth, isFirebaseReady } from "./firebase";
+import { syncClientSession, fetchCoachNote, fetchWeeklyTarget, ensureAuth } from "./firebase";
 import { useState, useEffect, useRef } from "react";
 
 const C = {
@@ -55,7 +55,6 @@ const SITE = "formiq.name.ng";
 // plan: "free" | "pro" | "elite"
 const USER_PLAN_KEY = "fiq_user_plan";
 const getUserPlan = () => localStorage.getItem(USER_PLAN_KEY) || "free";
-const setUserPlan = (p) => localStorage.setItem(USER_PLAN_KEY, p);
 
 // AI personality by plan
 const AI_PERSONA = {
@@ -106,8 +105,7 @@ const mkSimMetrics = (setNum) => {
 
 const calcScore = (m) => Math.round(METRICS_DEF.reduce((s,{key,weight})=>s+m[key]*weight,0));
 
-const fallback = (s,set,total,plan="free") => {
-  const name = AI_PERSONA[plan]?.name || "Victor";
+const fallback = (s,set,total) => {
   return s>=82
     ?`Clean set — mechanics held up well. Sharpen descent tempo to a deliberate 2-count for more power out of the hole. ${set<total?"Stay locked in for the next set.":"Strong session — consistency is building."}`
     :s>=65
@@ -149,14 +147,6 @@ const getReferralCode = () => {
   return code;
 };
 const getReferralCount = () => parseInt(localStorage.getItem("fiq_referral_count")||"0");
-const incrementReferral = () => {
-  const n = getReferralCount()+1;
-  localStorage.setItem("fiq_referral_count", String(n));
-  // Group discounts: 1 friend = 10%, 3 friends = 20%, 5+ friends = 35%
-  const discount = n>=5?35:n>=3?20:n>=1?10:0;
-  localStorage.setItem("fiq_referral_discount", String(discount));
-  return { count:n, discount };
-};
 const getReferralDiscount = () => parseInt(localStorage.getItem("fiq_referral_discount")||"0");
 
 // ── Report canvas ─────────────────────────────────────────────
@@ -500,7 +490,7 @@ function FormIQ({ onBack, clientCtx }){
   // Coach note + weekly target from Firestore
   const [coachNote,setCoachNote]   = useState(null);
   const [weeklyTarget,setWeeklyTarget] = useState(null);
-  const [trainerAccent,setTrainerAccent] = useState("#00E676");
+  const [trainerAccent] = useState("#00E676");
   const [syncing,setSyncing]       = useState(false);
   const [syncDone,setSyncDone]     = useState(false);
 

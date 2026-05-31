@@ -58,7 +58,6 @@ function Counter({ to, suffix="" }) {
 // ══════════════════════════════════════════════════════════════
 export default function LandingPage({ onGetStarted }) {
   const [billingAnnual, setBillingAnnual] = useState(false);
-  const [menuOpen, setMenuOpen]           = useState(false);
   const [scrolled, setScrolled]           = useState(false);
 
   useEffect(()=>{
@@ -564,7 +563,6 @@ export default function LandingPage({ onGetStarted }) {
               { name:"David C.",  score:62, trend:"−2", status:"at-risk",  plan:"Starter" },
             ].map(({name,score,trend,status,plan})=>{
               const col=score>=80?"#00E676":score>=65?"#F5A623":"#FF4757";
-              const sCol=status==="active"?"#00E676":status==="at-risk"?"#F5A623":"#FF4757";
               return(
                 <div key={name} style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 10px", borderBottom:`1px solid ${C.border}` }}>
                   <div style={{ width:36, height:36, borderRadius:"50%", background:`${col}22`, border:`1.5px solid ${col}55`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, color:col }}>
@@ -646,8 +644,8 @@ export default function LandingPage({ onGetStarted }) {
             <div style={{ fontSize:12, color:C.muted }}>{SITE} · AI Squat Form Tracking</div>
           </div>
           <div style={{ display:"flex", gap:28, flexWrap:"wrap" }}>
-            {["Features","Pricing","For Trainers","Privacy","Terms"].map(l=>(
-              <a key={l} href="#" style={{ fontSize:13, color:C.muted, textDecoration:"none" }} className="nav-link">{l}</a>
+            {[["Features","#features"],["Pricing","#pricing"],["For Trainers","#trainers"],["Privacy","#privacy"],["Terms","#terms"]].map(([l,href])=>(
+              <a key={l} href={href} style={{ fontSize:13, color:C.muted, textDecoration:"none" }} className="nav-link">{l}</a>
             ))}
           </div>
           <div style={{ fontSize:12, color:C.muted }}>

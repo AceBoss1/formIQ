@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { saveTrainer, savePendingReg, getTrainerPlans, saveTrainerPlans, DEFAULT_PLANS } from "./db";
+import { saveTrainer, savePendingReg, saveTrainerPlans, DEFAULT_PLANS } from "./db";
 
 const C = { bg:"#07080A", surface:"#0E1014", s2:"#141619", s3:"#1C1F24", border:"#23262D", accent:"#00E676", gold:"#F5A623", blue:"#3D8EF0", danger:"#FF4757", text:"#F0F2F5", muted:"#6B7280", mutedL:"#9CA3AF" };
 
@@ -18,25 +18,9 @@ const font = "system-ui,-apple-system,'Segoe UI',sans-serif";
 const inp  = { width:"100%", padding:"11px 14px", background:C.s2, border:`1px solid ${C.border}`, borderRadius:8, color:C.text, fontSize:14, fontFamily:font, boxSizing:"border-box", outline:"none" };
 const lbl  = { fontSize:11, color:C.mutedL, marginBottom:6, display:"block", fontWeight:500 };
 
-// ── Step indicator ────────────────────────────────────────────
-function StepDots({ step, total }) {
-  return (
-    <div style={{ display:"flex", gap:8, justifyContent:"center", marginBottom:28 }}>
-      {Array.from({length:total}).map((_,i)=>(
-        <div key={i} style={{ height:4, borderRadius:2, transition:"all .3s",
-          width: i===step?28:8,
-          background: i<step ? C.accent : i===step ? C.accent : C.s3,
-          opacity: i<=step ? 1 : 0.4,
-        }}/>
-      ))}
-    </div>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────
 export default function TrainerRegistration({ onDone, onLogin }) {
   const [step, setStep]       = useState(0);
-  // Registration fields
   const [form, setForm]       = useState({
     name:"", email:"", phone:"", location:"",
     specialization:"", bio:"", experience:"", website:"",
@@ -44,18 +28,14 @@ export default function TrainerRegistration({ onDone, onLogin }) {
     photoUrl:"",
   });
   const [formErr, setFormErr] = useState({});
-  // Approval state
-  const [approvalStatus, setApprovalStatus] = useState("pending"); // pending|approved|rejected
-  // Plan setup
+  const [approvalStatus, setApprovalStatus] = useState("pending");
   const [currency, setCurrency]   = useState("NGN");
   const [plans, setPlans]         = useState(DEFAULT_PLANS);
   const [planErrors, setPlanErrors] = useState({});
-  // Payment
   const [payEmail, setPayEmail]   = useState("");
   const [paying, setPaying]       = useState(false);
   const [payDone, setPayDone]     = useState(false);
 
-  const TOTAL_STEPS = 5;
   const fld = (k,v) => setForm(f=>({...f,[k]:v}));
 
   // ── Step 0: Registration form ─────────────────────────────

@@ -22,13 +22,7 @@ const GOALS=["Powerlifting","Strength","Athletic Performance","Weight Loss","Bod
 const PLAN_KEYS=["starter","pro","elite"];
 
 const scoreColor=(v)=>v>=80?T.accent:v>=65?T.gold:T.danger;
-const gradeStr=(s)=>s>=90?"S":s>=82?"A+":s>=75?"A":s>=65?"B":s>=55?"C":"D";
 const statusColor=(s)=>s==="active"?T.accent:s==="at-risk"?T.gold:T.danger;
-const fmt=(iso)=>{
-  if(!iso)return"—";
-  const d=new Date(iso);
-  return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"})+" "+d.toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"});
-};
 const fmtDate=(iso)=>{
   if(!iso)return"—";
   const d=new Date(iso),now=new Date();
