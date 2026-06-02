@@ -1,6 +1,6 @@
 {
-  "name": "formiq",
-  "homepage": "https://AceBoss1.github.io/formiq",
+  "name": "formIQ",
+  "homepage": "https://AceBoss1.github.io/formIQ",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
@@ -8,6 +8,7 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^13.5.0",
+    "firebase": "^12.14.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-scripts": "5.0.1",
