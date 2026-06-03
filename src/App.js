@@ -42,7 +42,7 @@ const TIPS = [
   "Depth first — hit parallel with control",
   "Explode up while maintaining form",
   "Tension before motion — get tight before descending",
-  "Strong setup = strong reps",
+  "Strong setup equals strong reps",
   "Quality reps build strength faster than ego lifting",
   "Use your glutes to finish the lockout",
   "Tight core · stable feet · powerful drive",
@@ -806,10 +806,11 @@ No lists or headers. Speak directly to the athlete.`}]})});
     <div style={{...page,padding:"28px 20px 32px"}}>
       <style>{`
         @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-        .fu{animation:fadeUp .4s ease forwards}
-        .fu1{animation-delay:.05s;opacity:0}.fu2{animation-delay:.12s;opacity:0}
-        .fu3{animation-delay:.19s;opacity:0}.fu4{animation-delay:.26s;opacity:0}
-        .fu5{animation-delay:.33s;opacity:0}
+        .fu1{animation:fadeUp .4s .05s ease both}
+        .fu2{animation:fadeUp .4s .12s ease both}
+        .fu3{animation:fadeUp .4s .19s ease both}
+        .fu4{animation:fadeUp .4s .26s ease both}
+        .fu5{animation:fadeUp .4s .33s ease both}
         .cc:hover{border-color:${C.accent}88!important}
         .rb:active{transform:scale(.97)}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
