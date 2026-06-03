@@ -232,6 +232,10 @@ export default function LandingPage({ onGetStarted }) {
           </a>
         </div>
         <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+          <button onClick={()=>onGetStarted("dashboard")}
+            style={{ background:"transparent", border:`1px solid ${C.border}`, color:C.mutedL, borderRadius:8, padding:"8px 16px", cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:font }}>
+            My Dashboard
+          </button>
           <button onClick={()=>onGetStarted("trainer-login")}
             style={{ background:"transparent", border:`1px solid ${C.border}`, color:C.mutedL, borderRadius:8, padding:"8px 16px", cursor:"pointer", fontSize:13, fontWeight:600, fontFamily:font }}>
             Trainer Login

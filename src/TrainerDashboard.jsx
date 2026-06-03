@@ -372,49 +372,39 @@ export default function TrainerDashboard({ trainer:initialTrainer, onBack, onLog
 
   // Load all real data on mount + set up real-time Firestore listeners
   useEffect(()=>{
-    // Always load from localStorage first (instant)
+    // Load localStorage first
     setClients(getClients(SLUG));
     setSessions(getSessions(SLUG));
     setSchedule(getSchedule(SLUG));
     setPlans(getTrainerPlans(SLUG));
 
-    // Then layer on real-time Firestore listeners
-    let unsubSessions = ()=>{};
-    let unsubClients  = ()=>{};
-
-    // Real-time session listener — merges Firestore sessions with local ones
-    unsubSessions = listenClientSessions(SLUG, (firestoreSessions)=>{
-      if(firestoreSessions.length > 0){
-        // Merge Firestore sessions with localStorage sessions (dedupe by id)
-        const local = getSessions(SLUG);
-        const localIds = new Set(local.map(s=>String(s.id)));
-        const newOnes  = firestoreSessions.filter(s=>!localIds.has(String(s.firestoreId||s.id)));
-        if(newOnes.length > 0){
-          // Add synced sessions to localStorage and update state
-          newOnes.forEach(s=>{
-            addSession(SLUG, {
-              ...s,
-              id: s.firestoreId || Date.now(),
-              clientId: s.clientId || 0,
-              clientName: s.clientName || "Client",
-            });
-          });
-        }
-        // Always update sessions from the merged store
-        setSessions(getSessions(SLUG));
-      }
+    // Real-time Firestore listener for client sessions
+    const unsubSessions = listenClientSessions(SLUG, (firestoreSessions)=>{
+      if(!firestoreSessions.length) return;
+      // Merge Firestore sessions with local — Firestore wins for client-synced sessions
+      const localSessions = getSessions(SLUG);
+      const localIds = new Set(localSessions.map(s=>String(s.firestoreId||"")));
+      const newOnes = firestoreSessions.filter(s=>!localIds.has(String(s.firestoreId)));
+      newOnes.forEach(s=>{
+        addSession(SLUG,{
+          ...s, id:s.firestoreId||Date.now(),
+          clientId: s.clientId||0,
+          clientName: s.clientName||"Client",
+          topMetric: s.topMetric||"Knee Alignment",
+          weakMetric: s.weakMetric||"Tempo Control",
+        });
+      });
+      // Always re-read merged sessions from db
+      setSessions(getSessions(SLUG));
     });
 
-    // Real-time client listener
-    unsubClients = listenClients(SLUG, (firestoreClients)=>{
-      if(firestoreClients.length > 0){
-        setSessions(prev => prev); // trigger re-render
-        setClients(firestoreClients);
-      }
+    // Real-time Firestore listener for clients
+    const unsubClients = listenClients(SLUG, (firestoreClients)=>{
+      if(firestoreClients.length) setClients(firestoreClients);
     });
 
     return ()=>{ unsubSessions(); unsubClients(); };
-  },[SLUG]); // eslint-disable-line
+  },[SLUG]);// eslint-disable-line
 
   const refresh = () => {
     setClients(getClients(SLUG));

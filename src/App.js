@@ -1,10 +1,11 @@
 import TrainerDashboard from "./TrainerDashboard";
 import TrainerRegistration from "./TrainerRegistration";
 import LandingPage from "./LandingPage";
+import UserDashboard from "./UserDashboard";
 import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash } from "./CoachBranded";
 import { getClientCtx, saveClientCtx, getTrainer, isSessionAllowed, incrementSession, sessionsRemaining } from "./db";
 import { SessionBadge, PaywallModal } from "./FreeSessionGate";
-import { syncClientSession, fetchCoachNote, fetchWeeklyTarget, ensureAuth } from "./firebase";
+import { syncClientSession, fetchCoachNote, fetchWeeklyTarget, ensureAuth, listenCoachNote, listenWeeklyTarget } from "./firebase";
 import { useState, useEffect, useRef } from "react";
 
 const C = {
@@ -513,12 +514,21 @@ function FormIQ({ onBack, clientCtx }){
     load(`${process.env.PUBLIC_URL}/logo512.png`,setLogo512Img);
   },[]);
 
-  // Fetch coach note + weekly target for invited clients
+  // Live coach note + weekly target listeners for invited clients
   useEffect(()=>{
-    if(!clientCtx?.trainerSlug||!clientCtx?.clientName) return;
+    if(!clientCtx?.trainerSlug) return;
     const clientId = clientCtx.token || clientCtx.clientName;
-    fetchCoachNote(clientCtx.trainerSlug, clientId).then(n=>{ if(n) setCoachNote(n); });
-    fetchWeeklyTarget(clientCtx.trainerSlug, clientId).then(t=>{ if(t) setWeeklyTarget(t); });
+    // Live note listener — updates instantly when trainer saves note
+    const unsubNote = listenCoachNote(
+      clientCtx.trainerSlug, clientId,
+      (note) => { if(note) setCoachNote(note); }
+    );
+    // Live target listener
+    const unsubTarget = listenWeeklyTarget(
+      clientCtx.trainerSlug, clientId,
+      (target) => { if(target) setWeeklyTarget(target); }
+    );
+    return ()=>{ unsubNote(); unsubTarget(); };
   },[clientCtx]);
 
   // Feature gating
@@ -908,9 +918,12 @@ No lists or headers. Speak directly to the athlete.`}]})});
         </div>
 
         {!clientCtx&&sessionLog.length>0&&(
-          <div style={{marginTop:14,textAlign:"center"}}>
-            <button onClick={()=>setShowHistory(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.mutedLight,borderRadius:8,padding:"8px 18px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:font}}>
-              📈 Session History ({sessionLog.length})
+          <div style={{marginTop:14,display:"flex",gap:10,justifyContent:"center"}}>
+            <button onClick={()=>setShowHistory(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.mutedLight,borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:font}}>
+              📈 History ({sessionLog.length})
+            </button>
+            <button onClick={()=>onBack&&onBack("dashboard")} style={{background:C.blue+"20",border:`1px solid ${C.blue}40`,color:C.blue,borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:font}}>
+              📊 My Dashboard
             </button>
           </div>
         )}
@@ -1410,6 +1423,7 @@ export default function App() {
 
   const handleSelect = (dest) => {
     if(dest==="squat")         { setView("squat"); return; }
+    if(dest==="dashboard")     { setView("dashboard"); return; }
     if(dest==="trainer-login") { setShowLogin(true); return; }
     if(dest==="register")      { setView("register"); return; }
     if(dest==="trainer"){
@@ -1434,7 +1448,8 @@ export default function App() {
     />);
   }
   if(view==="squat"&&inviteCtx) return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
-  if(view==="squat")            return <FormIQ onBack={()=>setView("landing")} clientCtx={null}/>;
+  if(view==="squat")            return <FormIQ onBack={(dest)=>setView(dest==="dashboard"?"dashboard":"landing")} clientCtx={null}/>;
+  if(view==="dashboard")        return <UserDashboard onBack={()=>setView("landing")}/>;
   if(view==="register")         return <TrainerRegistration onDone={()=>{ const t=getTrainer(); setTrainerData(t); setView("trainer"); }} onLogin={()=>setShowLogin(true)}/>;
   if(view==="trainer"){
     const t=trainerData||getTrainer();
