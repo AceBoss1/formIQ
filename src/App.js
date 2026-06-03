@@ -42,7 +42,7 @@ const TIPS = [
   "Depth first — hit parallel with control",
   "Explode up while maintaining form",
   "Tension before motion — get tight before descending",
-  "Strong setup equals strong reps",
+  "Strong setup = strong reps",
   "Quality reps build strength faster than ego lifting",
   "Use your glutes to finish the lockout",
   "Tight core · stable feet · powerful drive",
