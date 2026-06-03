@@ -5,7 +5,7 @@ import UserDashboard from "./UserDashboard";
 import { ClientInviteLanding, CoachBrandedBanner, parseInviteHash } from "./CoachBranded";
 import { getClientCtx, saveClientCtx, getTrainer, isSessionAllowed, incrementSession, sessionsRemaining } from "./db";
 import { SessionBadge, PaywallModal } from "./FreeSessionGate";
-import { syncClientSession, fetchCoachNote, fetchWeeklyTarget, ensureAuth, listenCoachNote, listenWeeklyTarget } from "./firebase";
+import { syncClientSession, ensureAuth, listenCoachNote, listenWeeklyTarget } from "./firebase";
 import { useState, useEffect, useRef } from "react";
 
 const C = {

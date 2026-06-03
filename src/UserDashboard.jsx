@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import {
   listenChallenges, joinChallenge, submitChallengeProgress,
-  listenChallengeLeaderboard, ensureAuth, isFirebaseReady,
+  listenChallengeLeaderboard, isFirebaseReady,
 } from "./firebase";
 
 const C = {
@@ -21,25 +21,6 @@ const getUserPlan  = () => localStorage.getItem("fiq_user_plan")||"free";
 const getUserId    = () => { let id=localStorage.getItem("fiq_uid"); if(!id){id=Math.random().toString(36).slice(2);localStorage.setItem("fiq_uid",id);} return id; };
 const getUserName  = () => localStorage.getItem("fiq_name")||"Anonymous";
 const getReferralCode = () => { let c=localStorage.getItem("fiq_referral_code"); if(!c){c="FIQ"+Math.random().toString(36).slice(2,8).toUpperCase();localStorage.setItem("fiq_referral_code",c);} return c; };
-
-// ── Mini sparkline ─────────────────────────────────────────────
-function Sparkline({data,color="#00E676",width=120,height=36}){
-  if(!data||data.length<2) return null;
-  const min=Math.min(...data),max=Math.max(...data),range=max-min||1;
-  const pts=data.map((v,i)=>`${(i/(data.length-1))*width},${height-((v-min)/range)*(height-4)+2}`).join(" ");
-  return(
-    <svg width={width} height={height} style={{overflow:"visible"}}>
-      <defs>
-        <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3"/>
-          <stop offset="100%" stopColor={color} stopOpacity="0"/>
-        </linearGradient>
-      </defs>
-      <polyline points={pts} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-      <circle cx={(data.length-1)/(data.length-1)*width} cy={height-((data[data.length-1]-min)/range)*(height-4)+2} r="3" fill={color}/>
-    </svg>
-  );
-}
 
 // ── Stat card ──────────────────────────────────────────────────
 function StatCard({label,value,sub,icon,color=C.accent}){

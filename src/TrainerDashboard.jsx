@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { getTrainer, saveTrainer, getClients, addClient, updateClient, getSessions, addSession, getTrainerPlans, saveTrainerPlans, getSchedule, addScheduleItem, updateScheduleItem, DEFAULT_PLANS } from "./db";
 import { InviteManager } from "./CoachBranded";
-import { listenClientSessions, listenClients, syncClientProfile, saveCoachNote, saveWeeklyTarget, isFirebaseReady } from "./firebase";
+import { listenClientSessions, listenClients, saveCoachNote, isFirebaseReady } from "./firebase";
 
 const T = {
   bg:"#07080A", surface:"#0E1014", s2:"#141619", s3:"#1C1F24",
