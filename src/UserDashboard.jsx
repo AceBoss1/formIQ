@@ -199,7 +199,7 @@ function LeaderboardModal({challenge,userId,userName,onClose}){
 // ══════════════════════════════════════════════════════════════
 // MAIN USER DASHBOARD
 // ══════════════════════════════════════════════════════════════
-export default function UserDashboard({ onBack }) {
+export default function UserDashboard({ onBack, onStartSession }) {
   const [tab,setTab]           = useState("overview");
   const [sessions,setSessions] = useState([]);
   const [challenges,setChallenges] = useState([]);
@@ -328,11 +328,14 @@ export default function UserDashboard({ onBack }) {
             <div style={{fontSize:18,fontWeight:700,color:C.text}}>{NAV.find(n=>n.id===tab)?.label}</div>
             <div style={{fontSize:12,color:C.muted,marginTop:1}}>{new Date().toLocaleDateString("en-GB",{weekday:"long",day:"numeric",month:"long"})}</div>
           </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
             <div style={{fontSize:11,color:isFirebaseReady()?C.accent:C.gold,display:"flex",alignItems:"center",gap:4}}>
               <div style={{width:6,height:6,borderRadius:"50%",background:isFirebaseReady()?C.accent:C.gold}}/>
               {isFirebaseReady()?"Live":"Offline"}
             </div>
+            <button onClick={onStartSession} style={{background:C.accent,color:"#000",border:"none",borderRadius:8,padding:"9px 18px",cursor:"pointer",fontWeight:700,fontSize:13,fontFamily:font,display:"flex",alignItems:"center",gap:6}}>
+              🏋️ New Session
+            </button>
           </div>
         </div>
 
@@ -344,7 +347,7 @@ export default function UserDashboard({ onBack }) {
                 <div style={{fontSize:48,marginBottom:16}}>🏋️</div>
                 <div style={{fontSize:20,fontWeight:700,color:C.text,marginBottom:8}}>No sessions yet</div>
                 <div style={{fontSize:13,color:C.muted,marginBottom:24,lineHeight:1.7}}>Complete your first session in the AI Squat Coach to see your progress dashboard come to life.</div>
-                <button onClick={onBack} style={{padding:"12px 28px",background:C.accent,color:"#000",border:"none",borderRadius:9,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:font}}>Start First Session →</button>
+                <button onClick={onStartSession} style={{padding:"12px 28px",background:C.accent,color:"#000",border:"none",borderRadius:9,fontWeight:700,fontSize:14,cursor:"pointer",fontFamily:font}}>Start First Session →</button>
               </div>
             ):(
               <>

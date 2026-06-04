@@ -923,7 +923,7 @@ No lists or headers. Speak directly to the athlete.`}]})});
             <button onClick={()=>setShowHistory(true)} style={{background:"transparent",border:`1px solid ${C.border}`,color:C.mutedLight,borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:font}}>
               📈 History ({sessionLog.length})
             </button>
-            <button onClick={()=>onBack&&onBack("dashboard")} style={{background:C.blue+"20",border:`1px solid ${C.blue}40`,color:C.blue,borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:font}}>
+            <button onClick={onDashboard} style={{background:C.blue+"20",border:`1px solid ${C.blue}40`,color:C.blue,borderRadius:8,padding:"8px 16px",cursor:"pointer",fontSize:12,fontWeight:600,fontFamily:font}}>
               📊 My Dashboard
             </button>
           </div>
@@ -1448,8 +1448,8 @@ export default function App() {
       onAccept={(ctx)=>{ saveClientCtx(ctx); setInviteCtx(ctx); window.history.replaceState(null,"",window.location.pathname); setView("squat"); }}
     />);
   }
-  if(view==="squat"&&inviteCtx) return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
-  if(view==="squat")            return <FormIQ onBack={(dest)=>setView(dest==="dashboard"?"dashboard":"landing")} clientCtx={null}/>;
+  if(view==="squat"&&inviteCtx) return <FormIQ onBack={null} onDashboard={null} clientCtx={inviteCtx}/>;
+  if(view==="squat")            return <FormIQ onBack={()=>setView("landing")} onDashboard={()=>setView("dashboard")} clientCtx={null}/>;
   if(view==="dashboard")        return <UserDashboard onBack={()=>setView("landing")} onStartSession={()=>setView("squat")}/>;
   if(view==="register")         return <TrainerRegistration onDone={()=>{ const t=getTrainer(); setTrainerData(t); setView("trainer"); }} onLogin={()=>setShowLogin(true)}/>;
   if(view==="trainer"){
