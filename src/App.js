@@ -450,7 +450,7 @@ function WeeklyTargetBanner({targets,accent}){
 // ══════════════════════════════════════════════════════════════
 // FORMIQ SQUAT APP
 // ══════════════════════════════════════════════════════════════
-function FormIQ({ onBack, clientCtx }){
+function FormIQ({ onBack, onDashboard, clientCtx }){
   const userPlan = getUserPlan();
   const persona = AI_PERSONA[userPlan] || AI_PERSONA.free;
 
@@ -1450,7 +1450,7 @@ export default function App() {
   }
   if(view==="squat"&&inviteCtx) return <FormIQ onBack={null} clientCtx={inviteCtx}/>;
   if(view==="squat")            return <FormIQ onBack={(dest)=>setView(dest==="dashboard"?"dashboard":"landing")} clientCtx={null}/>;
-  if(view==="dashboard")        return <UserDashboard onBack={()=>setView("landing")}/>;
+  if(view==="dashboard")        return <UserDashboard onBack={()=>setView("landing")} onStartSession={()=>setView("squat")}/>;
   if(view==="register")         return <TrainerRegistration onDone={()=>{ const t=getTrainer(); setTrainerData(t); setView("trainer"); }} onLogin={()=>setShowLogin(true)}/>;
   if(view==="trainer"){
     const t=trainerData||getTrainer();
