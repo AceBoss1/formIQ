@@ -206,6 +206,22 @@ export default function UserDashboard({ onBack, onStartSession }) {
   const [viewChallenge,setViewChallenge] = useState(null);
   const [refCopied,setRefCopied] = useState(false);
 
+  // Profile state
+  const [profile,setProfile] = useState(()=>{
+    try{ return JSON.parse(localStorage.getItem("fiq_profile")||"null"); }catch{ return null; }
+  });
+  const [profileForm,setProfileForm] = useState(()=>({
+    name:        localStorage.getItem("fiq_name")||"",
+    email:       localStorage.getItem("fiq_email")||"",
+    location:    localStorage.getItem("fiq_location")||"",
+    goal:        localStorage.getItem("fiq_goal")||"Strength",
+    experience:  localStorage.getItem("fiq_experience")||"beginner",
+    bio:         localStorage.getItem("fiq_bio")||"",
+    photoUrl:    localStorage.getItem("fiq_photo_url")||"",
+    plan:        getUserPlan(),
+  }));
+  const [profileSaved,setProfileSaved] = useState(false);
+
   const userId   = getUserId();
   const userName = getUserName();
   const userPlan = getUserPlan();
@@ -253,11 +269,26 @@ export default function UserDashboard({ onBack, onStartSession }) {
     try{ await navigator.clipboard.writeText(link); setRefCopied(true); setTimeout(()=>setRefCopied(false),2000); }catch{ alert(link); }
   };
 
+  const saveProfile = () => {
+    localStorage.setItem("fiq_name",       profileForm.name);
+    localStorage.setItem("fiq_email",      profileForm.email);
+    localStorage.setItem("fiq_location",   profileForm.location);
+    localStorage.setItem("fiq_goal",       profileForm.goal);
+    localStorage.setItem("fiq_experience", profileForm.experience);
+    localStorage.setItem("fiq_bio",        profileForm.bio);
+    localStorage.setItem("fiq_photo_url",  profileForm.photoUrl);
+    localStorage.setItem("fiq_profile",    JSON.stringify(profileForm));
+    setProfile(profileForm);
+    setProfileSaved(true);
+    setTimeout(()=>setProfileSaved(false),2500);
+  };
+
   const NAV=[
     {id:"overview",  icon:"◈", label:"Overview"},
     {id:"progress",  icon:"◬", label:"Progress"},
     {id:"challenges",icon:"🏆", label:"Challenges"},
     {id:"referrals", icon:"🎁", label:"Referrals"},
+    {id:"profile",   icon:"👤", label:"My Profile"},
   ];
 
   const lbl={fontSize:9,letterSpacing:3,color:C.muted,textTransform:"uppercase",fontWeight:700};
@@ -549,6 +580,141 @@ export default function UserDashboard({ onBack, onStartSession }) {
             </div>
           </div>
         )}
+        {/* ── PROFILE ── */}
+        {tab==="profile"&&(
+          <div style={{padding:"24px 28px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:16,alignItems:"start"}}>
+
+              {/* Left — profile card preview */}
+              <div style={{display:"flex",flexDirection:"column",gap:14}}>
+                <div style={{...card(true),textAlign:"center",padding:"28px 20px",background:"#071510"}}>
+                  {/* Avatar */}
+                  <div style={{position:"relative",display:"inline-block",marginBottom:14}}>
+                    {profileForm.photoUrl?(
+                      <img src={profileForm.photoUrl} alt="Profile"
+                        onError={e=>{e.target.style.display="none";}}
+                        style={{width:88,height:88,borderRadius:"50%",objectFit:"cover",objectPosition:"center top",border:`3px solid ${C.accent}`,display:"block"}}/>
+                    ):(
+                      <div style={{width:88,height:88,borderRadius:"50%",background:`${C.accent}20`,border:`3px solid ${C.accent}55`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:32,fontWeight:700,color:C.accent,margin:"0 auto"}}>
+                        {(profileForm.name||userName||"?")[0].toUpperCase()}
+                      </div>
+                    )}
+                    <div style={{position:"absolute",bottom:2,right:2,width:20,height:20,borderRadius:"50%",background:C.accent,border:`2px solid ${C.bg}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10}}>✓</div>
+                  </div>
+                  <div style={{fontSize:18,fontWeight:800,color:C.text,marginBottom:4}}>{profileForm.name||"Athlete"}</div>
+                  <div style={{fontSize:12,color:C.muted,marginBottom:10}}>{profileForm.location||"Location not set"}</div>
+                  <div style={{display:"inline-block",fontSize:10,fontWeight:800,letterSpacing:2,textTransform:"uppercase",
+                    color:userPlan==="elite"?C.gold:userPlan==="pro"?C.blue:C.accent,
+                    background:userPlan==="elite"?`${C.gold}18`:userPlan==="pro"?`${C.blue}18`:`${C.accent}18`,
+                    padding:"3px 12px",borderRadius:20,marginBottom:14}}>
+                    {userPlan} plan
+                  </div>
+                  {profileForm.bio&&<div style={{fontSize:13,color:C.mutedL,lineHeight:1.7,fontStyle:"italic"}}>"{profileForm.bio}"</div>}
+                </div>
+
+                {/* Stats summary */}
+                <div style={{...card(false)}}>
+                  <div style={{...lbl,marginBottom:14}}>Training Stats</div>
+                  {[
+                    {label:"Total Sessions",   value:totalSessions},
+                    {label:"Average Score",    value:avgScore||"—"},
+                    {label:"Best Score",       value:bestScore||"—"},
+                    {label:"Total Reps",       value:totalReps.toLocaleString()},
+                    {label:"Current Streak",   value:`${streak} day${streak!==1?"s":""}`},
+                    {label:"Training Goal",    value:profileForm.goal||"—"},
+                    {label:"Experience Level", value:profileForm.experience||"—"},
+                  ].map(({label,value})=>(
+                    <div key={label} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:`1px solid ${C.border}`}}>
+                      <span style={{fontSize:12,color:C.muted}}>{label}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:C.text}}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Right — edit form */}
+              <div style={{...card(false)}}>
+                <div style={{...lbl,marginBottom:20}}>Edit Profile</div>
+
+                {/* Photo URL */}
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:5}}>Profile Photo URL</div>
+                  <input value={profileForm.photoUrl} onChange={e=>setProfileForm(p=>({...p,photoUrl:e.target.value}))}
+                    placeholder="https://i.imgur.com/yourphoto.jpg"
+                    style={{width:"100%",padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
+                  <div style={{fontSize:10,color:C.muted,marginTop:4}}>Upload to <a href="https://imgur.com/upload" target="_blank" rel="noreferrer" style={{color:C.accent}}>Imgur</a> (free) and paste the direct link</div>
+                </div>
+
+                {/* Name + Email */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                  {[{label:"Display Name",key:"name",ph:"Your name",type:"text"},
+                    {label:"Email",key:"email",ph:"you@email.com",type:"email"}].map(({label,key,ph,type})=>(
+                    <div key={key}>
+                      <div style={{fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:5}}>{label}</div>
+                      <input type={type} value={profileForm[key]} onChange={e=>setProfileForm(p=>({...p,[key]:e.target.value}))} placeholder={ph}
+                        style={{width:"100%",padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Location */}
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:5}}>Location</div>
+                  <input value={profileForm.location} onChange={e=>setProfileForm(p=>({...p,location:e.target.value}))} placeholder="Lagos, Nigeria"
+                    style={{width:"100%",padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,fontFamily:font,boxSizing:"border-box",outline:"none"}}/>
+                </div>
+
+                {/* Goal + Experience */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                  <div>
+                    <div style={{fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:5}}>Training Goal</div>
+                    <select value={profileForm.goal} onChange={e=>setProfileForm(p=>({...p,goal:e.target.value}))}
+                      style={{width:"100%",padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,fontFamily:font,boxSizing:"border-box",outline:"none"}}>
+                      {["Strength","Powerlifting","Athletic Performance","Weight Loss","Bodybuilding","CrossFit","General Fitness","Competition Prep"].map(g=>(
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <div style={{fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:5}}>Experience Level</div>
+                    <select value={profileForm.experience} onChange={e=>setProfileForm(p=>({...p,experience:e.target.value}))}
+                      style={{width:"100%",padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,fontFamily:font,boxSizing:"border-box",outline:"none"}}>
+                      {[["beginner","Beginner (0–1 yr)"],["intermediate","Intermediate (1–3 yrs)"],["advanced","Advanced (3–5 yrs)"],["elite","Elite (5+ yrs)"]].map(([v,l])=>(
+                        <option key={v} value={v}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Bio */}
+                <div style={{marginBottom:20}}>
+                  <div style={{fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:5}}>Bio (optional)</div>
+                  <textarea rows={3} value={profileForm.bio} onChange={e=>setProfileForm(p=>({...p,bio:e.target.value}))}
+                    placeholder="Tell us about your training journey..."
+                    style={{width:"100%",padding:"10px 12px",background:C.s2,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,fontSize:13,fontFamily:font,boxSizing:"border-box",outline:"none",resize:"vertical"}}/>
+                </div>
+
+                {/* Plan info */}
+                <div style={{background:C.s2,borderRadius:8,padding:"12px 14px",marginBottom:20,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <div style={{fontSize:10,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:3}}>Current Plan</div>
+                    <div style={{fontSize:14,fontWeight:700,color:userPlan==="elite"?C.gold:userPlan==="pro"?C.blue:C.accent,textTransform:"capitalize"}}>{userPlan}</div>
+                  </div>
+                  {userPlan==="free"&&(
+                    <button onClick={()=>window.location.href="/#pricing"} style={{padding:"8px 16px",background:C.blue,color:"#fff",border:"none",borderRadius:7,cursor:"pointer",fontSize:12,fontWeight:700,fontFamily:font}}>
+                      Upgrade Plan →
+                    </button>
+                  )}
+                </div>
+
+                <button onClick={saveProfile} style={{width:"100%",padding:"13px",background:profileSaved?`${C.accent}25`:C.accent,color:profileSaved?C.accent:"#000",border:`1px solid ${profileSaved?C.accent:"transparent"}`,borderRadius:9,fontWeight:800,fontSize:14,cursor:"pointer",fontFamily:font,transition:"all .2s",letterSpacing:.5}}>
+                  {profileSaved?"✓ Profile Saved!":"Save Profile"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Leaderboard modal */}
