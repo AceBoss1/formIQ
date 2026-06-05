@@ -206,10 +206,6 @@ export default function UserDashboard({ onBack, onStartSession }) {
   const [viewChallenge,setViewChallenge] = useState(null);
   const [refCopied,setRefCopied] = useState(false);
 
-  // Profile state
-  const [profile,setProfile] = useState(()=>{
-    try{ return JSON.parse(localStorage.getItem("fiq_profile")||"null"); }catch{ return null; }
-  });
   const [profileForm,setProfileForm] = useState(()=>({
     name:        localStorage.getItem("fiq_name")||"",
     email:       localStorage.getItem("fiq_email")||"",
@@ -278,7 +274,6 @@ export default function UserDashboard({ onBack, onStartSession }) {
     localStorage.setItem("fiq_bio",        profileForm.bio);
     localStorage.setItem("fiq_photo_url",  profileForm.photoUrl);
     localStorage.setItem("fiq_profile",    JSON.stringify(profileForm));
-    setProfile(profileForm);
     setProfileSaved(true);
     setTimeout(()=>setProfileSaved(false),2500);
   };
